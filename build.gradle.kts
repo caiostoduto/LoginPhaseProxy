@@ -9,9 +9,20 @@ repositories {
     maven("https://repo.papermc.io/repository/maven-public/")
 }
 
+val velocityVersion = "3.5.0-SNAPSHOT"
+
 dependencies {
-    compileOnly("com.velocitypowered:velocity-api:3.5.0-SNAPSHOT")
-    annotationProcessor("com.velocitypowered:velocity-api:3.5.0-SNAPSHOT")
+    compileOnly("com.velocitypowered:velocity-api:$velocityVersion")
+    annotationProcessor("com.velocitypowered:velocity-api:$velocityVersion")
+
+    // Pick the first jar Gradle downloaded for run-velocity
+    val velocityJarDir = gradle.gradleUserHomeDir.resolve("caches/run-task-jars/velocity/jars/$velocityVersion")
+    val velocityJar = velocityJarDir.listFiles()?.firstOrNull { it.extension == "jar" }
+        ?: error("Velocity jar not found in $velocityJarDir — run the runVelocity task once first")
+    compileOnly(files(velocityJar))
+
+    // Additional dependencies
+    compileOnly("io.netty:netty-transport:4.2.10.Final")
 }
 
 java {
@@ -46,7 +57,11 @@ tasks {
 val templateSource = file("src/main/templates")
 val templateDest = layout.buildDirectory.dir("generated/sources/templates")
 val generateTemplates = tasks.register<Copy>("generateTemplates") {
-    val props = mapOf("version" to project.version)
+    val props = mapOf(
+        "description" to project.description,
+        "id" to project.property("id"),
+        "version" to project.version,
+    )
     inputs.properties(props)
 
     from(templateSource)
