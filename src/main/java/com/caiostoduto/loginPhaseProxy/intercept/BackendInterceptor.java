@@ -1,5 +1,6 @@
 package com.caiostoduto.loginPhaseProxy.intercept;
 
+import com.caiostoduto.loginPhaseProxy.utils.LoginPluginPacketCopies;
 import com.caiostoduto.loginPhaseProxy.utils.ProxyLoginSession;
 import com.velocitypowered.proxy.connection.PlayerDataForwarding;
 import com.velocitypowered.proxy.protocol.packet.*;
@@ -47,7 +48,8 @@ public class BackendInterceptor extends ChannelDuplexHandler {
                 }
 
                 // Send to the player via frontendInterceptor
-                session.frontendInterceptor.writeRawPacket(loginPluginMessagePacket);
+                session.frontendInterceptor.writeCopiedPacket(loginPluginMessagePacket);
+                ReferenceCountUtil.release(msg); // Release the original
                 return;
             }
             case SetCompressionPacket setCompressionPacket -> {
@@ -103,12 +105,13 @@ public class BackendInterceptor extends ChannelDuplexHandler {
      * Writes a packet directly to the backend channel.
      * Uses ctx.writeAndFlush so the full outbound pipeline (encryption, etc.) is applied.
      */
-    public void write(LoginPluginResponsePacket packet) {
-        logger.debug("[B][write] {}", packet);
+    public void writeCopiedPacket(LoginPluginResponsePacket packet) {
+        logger.debug("[F->B][write] {}", packet);
+        LoginPluginResponsePacket copiedPacket = LoginPluginPacketCopies.copy(packet);
 
-        ctx.pipeline().writeAndFlush(packet).addListener(future -> {
+        ctx.pipeline().writeAndFlush(copiedPacket).addListener(future -> {
             if (!future.isSuccess()) {
-                ReferenceCountUtil.release(packet);
+                ReferenceCountUtil.release(copiedPacket);
                 logger.warn("[B] failed to write LoginPluginResponsePacket to backend", future.cause());
             }
         });

@@ -1,5 +1,6 @@
 package com.caiostoduto.loginPhaseProxy.intercept;
 
+import com.caiostoduto.loginPhaseProxy.utils.LoginPluginPacketCopies;
 import com.caiostoduto.loginPhaseProxy.utils.ProxyLoginSession;
 import com.caiostoduto.loginPhaseProxy.utils.StealthPipeline;
 import com.velocitypowered.api.network.ProtocolVersion;
@@ -83,18 +84,9 @@ public class FrontendInterceptor extends ChannelDuplexHandler   {
                     return;
                 }
 
-                // Clone the packet so each pipeline gets its own buffer ref-count
-                LoginPluginResponsePacket clone = new LoginPluginResponsePacket(
-                        loginPluginResponsePacket.getId(),
-                        loginPluginResponsePacket.isSuccess(),
-                        loginPluginResponsePacket.content().copy()
-                );
-
-                // Release the original
-                ReferenceCountUtil.release(msg);
-
-                logger.debug("[F][F->B] {}", clone);
-                session.backendInterceptor.write(clone);
+                // Send to the backend server via backendInterceptor
+                session.backendInterceptor.writeCopiedPacket((LoginPluginResponsePacket) msg);
+                ReferenceCountUtil.release(msg); // Release the original
 
                 // Drop packet
                 return;
@@ -225,12 +217,13 @@ public class FrontendInterceptor extends ChannelDuplexHandler   {
      * Writes a packet directly to the client channel.
      * Uses ctx.writeAndFlush so the full outbound pipeline (encryption, etc.) is applied.
      */
-    public void writeRawPacket(LoginPluginMessagePacket packet) {
-        logger.debug("[F][writeRawPacket] {}", packet);
+    public void writeCopiedPacket(LoginPluginMessagePacket packet) {
+        logger.debug("[B->F][write] {}", packet);
+        LoginPluginMessagePacket copiedPacket = LoginPluginPacketCopies.copy(packet);
 
-        ctx.pipeline().writeAndFlush(packet).addListener(future -> {
+        ctx.pipeline().writeAndFlush(copiedPacket).addListener(future -> {
             if (!future.isSuccess()) {
-                ReferenceCountUtil.release(packet);
+                ReferenceCountUtil.release(copiedPacket);
                 logger.warn("[F] failed to write LoginPluginMessagePacket to player", future.cause());
             }
         });
@@ -307,26 +300,6 @@ public class FrontendInterceptor extends ChannelDuplexHandler   {
         Object packet;
         while ((packet = pendingMessages.poll()) != null) {
             ReferenceCountUtil.release(packet);
-        }
-    }
-}
-
-class RemovedPipelineHandlers {
-
-    private final Map<Integer, ChannelHandlerContext> map = Collections.synchronizedMap(new LinkedHashMap<>());
-
-    void put(int index, ChannelHandlerContext handler) {
-        map.put(index, handler);
-    }
-
-    void forEach(BiConsumer<Integer, ChannelHandlerContext> consumer) {
-        synchronized (map) {
-            Iterator<Map.Entry<Integer, ChannelHandlerContext>> iterator = map.entrySet().iterator();
-            while (iterator.hasNext()) {
-                Map.Entry<Integer, ChannelHandlerContext> entry = iterator.next();
-                consumer.accept(entry.getKey(), entry.getValue());
-                iterator.remove();
-            }
         }
     }
 }
