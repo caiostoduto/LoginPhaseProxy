@@ -32,9 +32,15 @@ public class LoginPhaseProxy {
         logger.info("Plugin initialized.");
     }
 
-    @Subscribe(priority = Short.MAX_VALUE)
+    @Subscribe
     public void onProxyInitialization(ProxyInitializeEvent event) {
-        logger.info("Injecting Velocity proxy");
-        VelocityChannelInitializer.inject(this.proxy);
+        logger.debug("Injecting Velocity proxy");
+        try {
+            VelocityChannelInitializer.inject(this.proxy);
+        } catch (VelocityChannelInitializer.VelocityCompatibilityException e) {
+            logger.error("LoginPhaseProxy could not hook into Velocity's network initializers. "
+                    + "This usually means the running Velocity build changed its private internals.", e);
+            throw e;
+        }
     }
 }
