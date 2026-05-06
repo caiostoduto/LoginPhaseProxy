@@ -20,7 +20,7 @@ import static com.caiostoduto.loginPhaseProxy.Constants.logger;
 
 public class FrontendInterceptor extends ChannelDuplexHandler   {
 
-    private final Queue<Object> queue = new ConcurrentLinkedQueue<>();
+    private final Queue<Object> pendingMessages = new ConcurrentLinkedQueue<>();
     private final RemovedPipelineHandlers removedPipelineHandlers = new RemovedPipelineHandlers();
 
     private UUID playerUUID;
@@ -28,7 +28,7 @@ public class FrontendInterceptor extends ChannelDuplexHandler   {
     private ProxyLoginSession session;
     private ChannelHandlerContext ctx;
 
-    private boolean WaitingLoginAcknowledgedPacket = false;
+    private volatile boolean waitingLoginAcknowledgedPacket = false;
 
     // -------------------------------------------------------------------------
     // Handler lifecycle
@@ -43,6 +43,12 @@ public class FrontendInterceptor extends ChannelDuplexHandler   {
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         cleanup();
         super.channelInactive(ctx);
+    }
+
+    @Override
+    public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
+        cleanup();
+        super.handlerRemoved(ctx);
     }
 
     // -------------------------------------------------------------------------
@@ -61,7 +67,7 @@ public class FrontendInterceptor extends ChannelDuplexHandler   {
             }
             case LoginPluginResponsePacket loginPluginResponsePacket -> {
                 // Unrelated to this plugin flow (probably fml:loginwrapper)
-                if (WaitingLoginAcknowledgedPacket) {
+                if (waitingLoginAcknowledgedPacket) {
                     break;
                 }
 
@@ -87,7 +93,7 @@ public class FrontendInterceptor extends ChannelDuplexHandler   {
                 // Release the original
                 ReferenceCountUtil.release(msg);
 
-                logger.debug("[F][F->B] ", clone);
+                logger.debug("[F][F->B] {}", clone);
                 session.backendInterceptor.write(clone);
 
                 // Drop packet
@@ -115,7 +121,7 @@ public class FrontendInterceptor extends ChannelDuplexHandler   {
 
                 // Send all buffered packets to the player
                 Object packet;
-                while ((packet = queue.poll()) != null) {
+                while ((packet = pendingMessages.poll()) != null) {
                     ctx.write(packet);
                 }
                 ctx.flush();
@@ -142,21 +148,21 @@ public class FrontendInterceptor extends ChannelDuplexHandler   {
 
         switch (msg) {
             case SetCompressionPacket setCompressionPacket -> {
-                if (WaitingLoginAcknowledgedPacket) {
+                if (waitingLoginAcknowledgedPacket) {
                     break;
                 }
 
                 // Add setCompressionPacket to buffer
-                queue.add(setCompressionPacket);
+                pendingMessages.add(setCompressionPacket);
                 return; // Drop packet
             }
             case ServerLoginSuccessPacket serverLoginSuccessPacket -> {
-                if (WaitingLoginAcknowledgedPacket) {
+                if (waitingLoginAcknowledgedPacket) {
                     break;
                 }
 
                 // Add setCompressionPacket to buffer
-                queue.add(serverLoginSuccessPacket);
+                pendingMessages.add(serverLoginSuccessPacket);
 
                 createEntryProxyLoginSession(serverLoginSuccessPacket);
 
@@ -201,8 +207,8 @@ public class FrontendInterceptor extends ChannelDuplexHandler   {
                 break;
             }
             default -> {
-                if (WaitingLoginAcknowledgedPacket) {
-                    queue.add(msg);
+                if (waitingLoginAcknowledgedPacket) {
+                    pendingMessages.add(msg);
                     return;
                 }
             }
@@ -224,8 +230,11 @@ public class FrontendInterceptor extends ChannelDuplexHandler   {
     public void writeRawPacket(LoginPluginMessagePacket packet) {
         logger.debug("[F][writeRawPacket] {}", packet);
 
-        ctx.executor().execute(() -> {
-            ctx.pipeline().writeAndFlush(packet);
+        ctx.pipeline().writeAndFlush(packet).addListener(future -> {
+            if (!future.isSuccess()) {
+                ReferenceCountUtil.release(packet);
+                logger.warn("[F] failed to write LoginPluginMessagePacket to player", future.cause());
+            }
         });
     }
 
@@ -244,12 +253,12 @@ public class FrontendInterceptor extends ChannelDuplexHandler   {
             if (this.clientProtocolVersion.lessThan(ProtocolVersion.MINECRAFT_1_20_2)) {
                 ctx.pipeline().remove(this); // No LoginAcknowledgedPacket
             } else {
-                this.WaitingLoginAcknowledgedPacket = true;
+                this.waitingLoginAcknowledgedPacket = true;
             }
 
             // Send all buffered packets to the player
             Object packet;
-            while ((packet = queue.poll()) != null) {
+            while ((packet = pendingMessages.poll()) != null) {
                 ctx.pipeline().write(packet);
 
                 if (packet instanceof SetCompressionPacket) {
@@ -300,7 +309,7 @@ public class FrontendInterceptor extends ChannelDuplexHandler   {
 
         // Release any ByteBufs still sitting in the buffer to avoid memory leaks
         Object packet;
-        while ((packet = queue.poll()) != null) {
+        while ((packet = pendingMessages.poll()) != null) {
             ReferenceCountUtil.release(packet);
         }
     }

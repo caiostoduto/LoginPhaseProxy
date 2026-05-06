@@ -106,8 +106,11 @@ public class BackendInterceptor extends ChannelDuplexHandler {
     public void write(LoginPluginResponsePacket packet) {
         logger.debug("[B][write] {}", packet);
 
-        ctx.executor().execute(() -> {
-            ctx.pipeline().writeAndFlush(packet);
+        ctx.pipeline().writeAndFlush(packet).addListener(future -> {
+            if (!future.isSuccess()) {
+                ReferenceCountUtil.release(packet);
+                logger.warn("[B] failed to write LoginPluginResponsePacket to backend", future.cause());
+            }
         });
     }
 
