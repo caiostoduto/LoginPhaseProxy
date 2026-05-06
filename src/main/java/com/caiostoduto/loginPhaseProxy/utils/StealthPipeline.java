@@ -1,17 +1,25 @@
 package com.caiostoduto.loginPhaseProxy.utils;
 
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPipeline;
+import io.netty.channel.DefaultChannelPipeline;
 
 import java.lang.reflect.Field;
+import java.util.List;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 public class StealthPipeline {
 
+    private static final Field HEAD_FIELD;
     private static final Field PREV_FIELD;
     private static final Field NEXT_FIELD;
 
     static {
         try {
+            HEAD_FIELD = DefaultChannelPipeline.class.getDeclaredField("head");
+            HEAD_FIELD.setAccessible(true);
+
             // Grab a live context to find the concrete class at runtime
             Class<?> ctxClass = Class.forName("io.netty.channel.AbstractChannelHandlerContext");
 
@@ -24,52 +32,71 @@ public class StealthPipeline {
         }
     }
 
-    // Returns the ctx node, caller must store this for restore
-    public static ChannelHandlerContext stealthRemove(ChannelPipeline pipeline, String handlerName) {
-        ChannelHandlerContext ctx = pipeline.context(handlerName);
-        if (ctx == null) throw new IllegalArgumentException("Handler not found: " + handlerName);
+    private final Queue<RemovedHandlerContext> removedHandlers = new ConcurrentLinkedQueue<>();
 
-        try {
-            Object prev = PREV_FIELD.get(ctx);
-            Object next = NEXT_FIELD.get(ctx);
+    private record RemovedHandlerContext(ChannelHandlerContext currentNode,
+                                         List<String> previousNodes) {}
 
-            NEXT_FIELD.set(prev, next);
-            PREV_FIELD.set(next, prev);
+    public void removeIfPresent(ChannelHandlerContext ctx, Class<? extends ChannelHandler> handlerType) {
+        ChannelHandlerContext currentNode = ctx.pipeline().context(handlerType);
 
-            // Deliberately leave prev/next on ctx pointing to old neighbors
-            //  so restore knows where to re-insert
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to stealth remove handler: " + handlerName, e);
-        }
+        if (currentNode != null) {
+            List<String> nodes = ctx.pipeline().names();
+            List<String> previousNodes = nodes.subList(0, nodes.indexOf(currentNode.name()));
 
-        return ctx;
-    }
+            try {
+                ChannelHandlerContext prevNode = (ChannelHandlerContext) PREV_FIELD.get(currentNode);
+                ChannelHandlerContext nextNode = (ChannelHandlerContext) NEXT_FIELD.get(currentNode);
 
-    public static void stealthRestoreAtIndex(ChannelPipeline pipeline, Object savedCtx, int index) {
-        try {
-            // Walk from head node
-            Field headField = pipeline.getClass().getDeclaredField("head");
-            headField.setAccessible(true);
-            Object current = headField.get(pipeline);
+                if (prevNode != null) {
+                    NEXT_FIELD.set(prevNode, nextNode);
+                }
 
-            // Walk `index` steps forward (index 0 = insert after head)
-            for (int i = 0; i < index; i++) {
-                Object next = NEXT_FIELD.get(current);
-                if (next == null) throw new IndexOutOfBoundsException("Index " + index + " out of pipeline bounds");
-                current = next;
+                if (nextNode != null) {
+                    PREV_FIELD.set(nextNode, prevNode);
+                }
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to stealth remove handler: " + handlerType.getName(), e);
             }
 
-            // current is now the anchor (node at index-1), current.next is the node at index
-            Object anchorNext = NEXT_FIELD.get(current);
+            RemovedHandlerContext removedHandlerContext = new RemovedHandlerContext(currentNode, previousNodes);
+            removedHandlers.add(removedHandlerContext);
+        }
+    }
 
-            // anchor <-> savedCtx <-> anchorNext
-            NEXT_FIELD.set(current, savedCtx);
-            PREV_FIELD.set(savedCtx, current);
-            NEXT_FIELD.set(savedCtx, anchorNext);
-            PREV_FIELD.set(anchorNext, savedCtx);
+    public void restoreHandlers(ChannelHandlerContext ctx) {
+        RemovedHandlerContext removedHandler;
+        while ((removedHandler = removedHandlers.poll()) != null) {
+            ChannelHandlerContext currentNode = removedHandler.currentNode;
+            List<String> previousNodes = removedHandler.previousNodes;
 
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to stealth restore handler at index " + index, e);
+            ChannelHandlerContext prevNode = null;
+            for (String previousNodeString : previousNodes.reversed()) {
+                prevNode = ctx.pipeline().context(previousNodeString);
+                if (prevNode != null) {
+                    break;
+                }
+            }
+
+            try {
+                if (prevNode != null) {
+                    ChannelHandlerContext nextNode = (ChannelHandlerContext) NEXT_FIELD.get(prevNode);
+
+                    PREV_FIELD.set(currentNode, prevNode); // currentNode.prev = prevNode
+                    NEXT_FIELD.set(currentNode, nextNode); // currentNode.next = nextNode
+                    PREV_FIELD.set(nextNode, currentNode); // nextNode.prev = currentNode
+                    NEXT_FIELD.set(prevNode, currentNode); // prevNode.next = currentNode
+                } else {
+                    ChannelHandlerContext nextNode = (ChannelHandlerContext) HEAD_FIELD.get(ctx.pipeline());
+
+                    // Set currentNode as head
+                    PREV_FIELD.set(currentNode, null);           // currentNode.prev = null
+                    NEXT_FIELD.set(currentNode, nextNode);       // currentNode.next = next
+                    HEAD_FIELD.set(ctx.pipeline(), currentNode); // head = currentNode
+                }
+            } catch (java.lang.IllegalAccessException e) {
+                throw new RuntimeException("Failed to stealth restore handler: " + currentNode.getClass().getName(), e);
+            }
         }
     }
 }

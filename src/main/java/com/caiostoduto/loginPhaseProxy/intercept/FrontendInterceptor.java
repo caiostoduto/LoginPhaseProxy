@@ -21,12 +21,12 @@ import static com.caiostoduto.loginPhaseProxy.Constants.logger;
 public class FrontendInterceptor extends ChannelDuplexHandler   {
 
     private final Queue<Object> pendingMessages = new ConcurrentLinkedQueue<>();
-    private final RemovedPipelineHandlers removedPipelineHandlers = new RemovedPipelineHandlers();
 
     private UUID playerUUID;
     protected ProtocolVersion clientProtocolVersion;
     private ProxyLoginSession session;
     private ChannelHandlerContext ctx;
+    private final StealthPipeline stealthPipeline = new StealthPipeline();
 
     private volatile boolean waitingLoginAcknowledgedPacket = false;
 
@@ -179,12 +179,10 @@ public class FrontendInterceptor extends ChannelDuplexHandler   {
                         switch (handler) {
                             // Remove temporarily MinecraftCompressorAndLengthEncoder and MinecraftCompressDecoder if exists
                             case MinecraftCompressorAndLengthEncoder compressEncoder -> {
-                                ChannelHandlerContext handlerContext = StealthPipeline.stealthRemove(ctx.pipeline(), name);
-                                removedPipelineHandlers.put(handlerIndex, handlerContext);
+                                stealthPipeline.removeIfPresent(ctx, compressEncoder.getClass());
                             }
                             case MinecraftCompressDecoder compressDecoder -> {
-                                ChannelHandlerContext handlerContext = StealthPipeline.stealthRemove(ctx.pipeline(), name);
-                                removedPipelineHandlers.put(handlerIndex, handlerContext);
+                                stealthPipeline.removeIfPresent(ctx, compressDecoder.getClass());
                             }
                             // Add MinecraftVarintLengthEncoder before MinecraftDecoder
                             case MinecraftDecoder minecraftDecoder -> {
@@ -288,13 +286,11 @@ public class FrontendInterceptor extends ChannelDuplexHandler   {
      * Remove MinecraftVarintLengthEncoder
      */
     private void restorePipeline() {
-        // Restore any temporarily removed handlers to their original positions in the pipeline
-        removedPipelineHandlers.forEach((index, handlerContext) -> {
-            StealthPipeline.stealthRestoreAtIndex(ctx.pipeline(), handlerContext, index);
-        });
-
         // Remove MinecraftVarintLengthEncoder
         ctx.pipeline().remove(MinecraftVarintLengthEncoder.class);
+
+        // Restore any temporarily removed handlers to their original positions in the pipeline
+        stealthPipeline.restoreHandlers(ctx);
     }
 
     /**
