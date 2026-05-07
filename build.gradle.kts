@@ -9,17 +9,19 @@ repositories {
     maven("https://repo.papermc.io/repository/maven-public/")
 }
 
-val velocityVersion = "3.5.0-SNAPSHOT"
+val pinnedVelocityVersion = "3.5.0-SNAPSHOT"
+val pinnedVelocityBuild = 593
+
+val downloadVelocityBuild = tasks.register<DownloadVelocityBuild>("downloadVelocityBuild") {
+    velocityVersion.set(pinnedVelocityVersion)
+    velocityBuild.set(pinnedVelocityBuild)
+    outputFile.set(layout.buildDirectory.file("velocity/$pinnedVelocityVersion/$pinnedVelocityBuild/velocity.jar"))
+}
 
 dependencies {
-    compileOnly("com.velocitypowered:velocity-api:$velocityVersion")
-    annotationProcessor("com.velocitypowered:velocity-api:$velocityVersion")
-
-    // Pick the first jar Gradle downloaded for run-velocity
-    val velocityJarDir = gradle.gradleUserHomeDir.resolve("caches/run-task-jars/velocity/jars/$velocityVersion")
-    val velocityJar = velocityJarDir.listFiles()?.firstOrNull { it.extension == "jar" }
-        ?: error("Velocity jar not found in $velocityJarDir — run the runVelocity task once first")
-    compileOnly(files(velocityJar))
+    compileOnly("com.velocitypowered:velocity-api:$pinnedVelocityVersion")
+    annotationProcessor("com.velocitypowered:velocity-api:$pinnedVelocityVersion")
+    compileOnly(files(downloadVelocityBuild.flatMap { it.outputFile }))
 
     // Additional dependencies
     compileOnly("io.netty:netty-transport:4.2.10.Final")
@@ -51,7 +53,8 @@ tasks {
         // Configure the Velocity version for our task.
         // This is the only required configuration besides applying the plugin.
         // Your plugin's jar (or shadowJar if present) will be used automatically.
-        velocityVersion("3.5.0-SNAPSHOT")
+        velocityVersion(pinnedVelocityVersion)
+        build(pinnedVelocityBuild)
     }
 }
 
