@@ -28,7 +28,6 @@ public class LoginPhaseProxy {
 
 //        Configurator.setLevel("loginphaseproxy", Level.DEBUG);
         logger.debug("Logger level set to DEBUG");
-
         logger.info("Plugin initialized.");
     }
 

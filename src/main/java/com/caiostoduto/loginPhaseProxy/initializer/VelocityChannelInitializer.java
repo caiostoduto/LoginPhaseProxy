@@ -11,13 +11,15 @@ import static com.caiostoduto.loginPhaseProxy.Constants.logger;
 
 public class VelocityChannelInitializer {
 
-    private static final String COMPATIBILITY_ERROR =
-            "Unable to inject LoginPhaseProxy into Velocity. Velocity's private network initializer layout is not compatible with this plugin version.";
+    private static final String COMPATIBILITY_ERROR = "Unable to inject LoginPhaseProxy into Velocity. Velocity's "
+            + "private network initializer layout is not compatible with this plugin version.";
 
     public static void inject(ProxyServer proxy) {
         try {
+            // com.velocitypowered.proxy.network.ConnectionManager
             Object connectionManager = readRequiredField(proxy, "cm", "proxy.cm");
 
+            // com.velocitypowered.proxy.network.ServerChannelInitializer
             Object serverHolder = readRequiredField(
                     connectionManager,
                     "serverChannelInitializer",
@@ -27,6 +29,7 @@ public class VelocityChannelInitializer {
                     "proxy.cm.serverChannelInitializer.initializer",
                     InitializerSide.FRONTEND);
 
+            // com.velocitypowered.proxy.network.BackendChannelInitializer
             Object backendHolder = readRequiredField(
                     connectionManager,
                     "backendChannelInitializer",
@@ -36,6 +39,7 @@ public class VelocityChannelInitializer {
                     "proxy.cm.backendChannelInitializer.initializer",
                     InitializerSide.BACKEND);
 
+            // Install our ChannelInitializers to inject the FrontendInterceptor/BackendInterceptor into the pipeline
             frontendInjection.install();
             backendInjection.install();
             logger.info("Velocity network initializers injected successfully.");

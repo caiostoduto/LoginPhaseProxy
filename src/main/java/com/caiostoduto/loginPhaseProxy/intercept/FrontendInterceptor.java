@@ -14,22 +14,25 @@ import io.netty.channel.ChannelPromise;
 import io.netty.util.ReferenceCountUtil;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.function.BiConsumer;
 
 import static com.caiostoduto.loginPhaseProxy.Constants.logger;
 
 public class FrontendInterceptor extends ChannelDuplexHandler   {
 
-    private final Queue<Object> pendingMessages = new ConcurrentLinkedQueue<>();
+    private static final String TEMP_FRAME_ENCODER = "frame-encoder";
+
+    private final Queue<PendingWrite> pendingWrites = new ArrayDeque<>();
+    private final StealthPipeline stealthPipeline = new StealthPipeline();
 
     private UUID playerUUID;
     protected ProtocolVersion clientProtocolVersion;
     private ProxyLoginSession session;
     private ChannelHandlerContext ctx;
-    private final StealthPipeline stealthPipeline = new StealthPipeline();
 
-    private volatile boolean waitingLoginAcknowledgedPacket = false;
+    private boolean waitingLoginAcknowledgedPacket;
+    private boolean pipelinePrepared;
+
+    private record PendingWrite(Object message, ChannelPromise promise) {}
 
     // -------------------------------------------------------------------------
     // Handler lifecycle
@@ -64,62 +67,47 @@ public class FrontendInterceptor extends ChannelDuplexHandler   {
             case HandshakePacket handshakePacket -> {
                 // Get the client's protocol version for encoding messages later
                 this.clientProtocolVersion = handshakePacket.getProtocolVersion();
-                // If client sent in wrong order Velocity will handle it automatically
             }
             case LoginPluginResponsePacket loginPluginResponsePacket -> {
-                // Unrelated to this plugin flow (probably fml:loginwrapper)
                 if (waitingLoginAcknowledgedPacket) {
+                    // Send packet (Probably Ambassador)
                     break;
                 }
 
-                // Relay LoginPluginResponse to the backend
-                // REVIEW: What if out of order?
-
-                // (session != null && session.frontendInterceptor) after [F][V->C] serverLoginSuccessPacket arrives
-                // session.backendInterceptor != null after [B][S->V] setCompressionPacket arrives
-                if (session == null || session.frontendInterceptor == null || session.backendInterceptor == null) {
-                    // REVIEW: Shouldn't happen, but if it does, drop the packet
-                    logger.warn("[F] received LoginPluginResponse but session/backend is null — dropping");
+                if (session == null || !session.isBackendLinked() || session.backendInterceptor == null) {
+                    logger.warn("[F] received LoginPluginResponse without linked backend; dropping id {}",
+                            loginPluginResponsePacket.getId());
                     ReferenceCountUtil.release(msg);
+                    // Drop packet
                     return;
                 }
 
-                // Send to the backend server via backendInterceptor
+                if (!session.consumeLoginPluginResponse(loginPluginResponsePacket)) {
+                    logger.warn("[F] received unexpected LoginPluginResponse id {}; dropping",
+                            loginPluginResponsePacket.getId());
+                    ReferenceCountUtil.release(msg);
+                    // Drop packet
+                    return;
+                }
+
+                // Send to the Backend Server via BackendInterceptor
                 session.backendInterceptor.writeCopiedPacket((LoginPluginResponsePacket) msg);
-                ReferenceCountUtil.release(msg); // Release the original
+                // Release original message
+                ReferenceCountUtil.release(msg);
 
                 // Drop packet
                 return;
             }
-            case LoginAcknowledgedPacket loginAcknowledgedPacket -> {
-                // Should be received after [B][S->V] ServerLoginPacket => [F][V->C] LoginPluginMessagePacket
-                // This means that all work needed is done, so remove FrontendInterceptor from pipeline
-                // REVIEW: What if out of order?
-
-                // (session != null && session.frontendInterceptor) after [F][V->C] serverLoginSuccessPacket arrives
-                // session.frontendInterceptor != null after [B][V->S] ServerLoginPacket arrives
-                // session.backendInterceptor == null before [B][V->S] ServerLoginPacket arrives ||
-                //  after [B][S->V] ServerLoginSuccessPacket arrives
-                if (session == null || session.frontendInterceptor == null || session.backendInterceptor != null) {
-                    // REVIEW: Shouldn't happen, but if it does, drop the packet
-                    logger.warn("[F] received LoginPluginResponse but session/backend is null — dropping");
-                    ReferenceCountUtil.release(msg);
-                    return;
+            case LoginAcknowledgedPacket ignored -> {
+                if (!waitingLoginAcknowledgedPacket) {
+                    // Send packet
+                    break;
                 }
 
-                // Set MinecraftConnection.state to StateRegistry.CONFIG
-                MinecraftConnection MinecraftConnection = ctx.pipeline().get(MinecraftConnection.class);
-                MinecraftConnection.setState(StateRegistry.CONFIG);
-
-                // Send all buffered packets to the player
-                Object packet;
-                while ((packet = pendingMessages.poll()) != null) {
-                    ctx.write(packet);
-                }
-                ctx.flush();
-
-                // Remove FrontendInterceptor from pipeline
-                ctx.pipeline().remove(this);
+                // Finish the setup (undo changes and flush buffer)
+                finishFrontendLogin(ctx);
+                // Release original message
+                ReferenceCountUtil.release(msg);
 
                 // Drop packet, we already sent a synthetic LoginAcknowledgedPacket
                 return;
@@ -139,72 +127,43 @@ public class FrontendInterceptor extends ChannelDuplexHandler   {
         logger.debug("[F][V->C] {} ({})", msg.getClass().getName(), ctx.pipeline().names());
 
         switch (msg) {
-            case SetCompressionPacket setCompressionPacket -> {
+            case SetCompressionPacket ignored -> {
                 if (waitingLoginAcknowledgedPacket) {
+                    // Send packet
                     break;
                 }
 
-                // Add setCompressionPacket to buffer
-                pendingMessages.add(setCompressionPacket);
-                return; // Drop packet
+                // Add packet to buffer
+                pendingWrites.add(new PendingWrite(msg, promise));
+                // Drop packet
+                return;
             }
             case ServerLoginSuccessPacket serverLoginSuccessPacket -> {
                 if (waitingLoginAcknowledgedPacket) {
+                    // Send packet
                     break;
                 }
 
-                // Add setCompressionPacket to buffer
-                pendingMessages.add(serverLoginSuccessPacket);
-
+                // Add packet to buffer
+                pendingWrites.add(new PendingWrite(msg, promise));
+                // Create entry session to establish connection with BackendInterceptor later
                 createEntryProxyLoginSession(serverLoginSuccessPacket);
-
-                ctx.executor().execute(() -> {
-                    // Gaslight Velocity: pretend the client already sent LoginAcknowledged
-                    ctx.fireChannelRead(new LoginAcknowledgedPacket());
-
-                    List<String> handlerNames = ctx.pipeline().names();
-
-                    // Remove temporarily some handlers so that the pipeline is identical to the LoginPhase
-                    //  before setCompression
-                    ctx.pipeline().toMap().forEach((name, handler) -> {
-                        int handlerIndex = handlerNames.indexOf(name);
-                        switch (handler) {
-                            // Remove temporarily MinecraftCompressorAndLengthEncoder and MinecraftCompressDecoder if exists
-                            case MinecraftCompressorAndLengthEncoder compressEncoder -> {
-                                stealthPipeline.removeIfPresent(ctx, compressEncoder.getClass());
-                            }
-                            case MinecraftCompressDecoder compressDecoder -> {
-                                stealthPipeline.removeIfPresent(ctx, compressDecoder.getClass());
-                            }
-                            // Add MinecraftVarintLengthEncoder before MinecraftDecoder
-                            case MinecraftDecoder minecraftDecoder -> {
-                                ctx.pipeline().addBefore(name, "frame-encoder", MinecraftVarintLengthEncoder.INSTANCE);
-                            }
-                            // Set MinecraftConnection.state to StateRegistry.LOGIN so it can decode
-                            //  LoginPluginMessagePackets needed for the login phase
-                            case MinecraftConnection minecraftConnection -> {
-                                minecraftConnection.setState(StateRegistry.LOGIN);
-                            }
-                            default -> {}
-                        }
-                    });
-                });
-
+                // Prepare pipeline removing unnecessary handlers and changing MinecraftConnection.state to LOGIN
+                preparePipeline(ctx);
+                // Drop packet
                 return;
             }
-            case LoginPluginMessagePacket loginPluginMessagePacket -> {
-                // Unrelated to this plugin flow (probably fml:loginwrapper)
-                break;
-            }
+            // Send packet (Probably Ambassador)
+            case LoginPluginMessagePacket loginPluginMessagePacket -> {}
             default -> {
                 if (waitingLoginAcknowledgedPacket) {
-                    pendingMessages.add(msg);
+                    // Add packet to buffer
+                    pendingWrites.add(new PendingWrite(msg, promise));
+                    // Drop packet
                     return;
                 }
             }
         }
-
-        logger.debug("sent");
 
         super.write(ctx, msg, promise);
     }
@@ -214,10 +173,34 @@ public class FrontendInterceptor extends ChannelDuplexHandler   {
     // -------------------------------------------------------------------------
 
     /**
+     * Flushes all buffered packets to the client channel in the correct order and post-handshake logic
+     */
+    protected void flushBuffer() {
+        logger.debug("[F][V] flushBuffer");
+
+        if (ctx == null || !ctx.channel().isActive()) {
+            writePendingPackets();
+            return;
+        }
+
+        ctx.executor().execute(() -> {
+            if (clientProtocolVersion != null && clientProtocolVersion.lessThan(ProtocolVersion.MINECRAFT_1_20_2)) {
+                removeSelf();
+                // REVIEW: Apparently no need for minecraftConnection.setState(StateRegistry.CONFIG);
+            } else {
+                waitingLoginAcknowledgedPacket = true;
+            }
+
+            writePendingPackets();
+            ctx.flush();
+        });
+    }
+
+    /**
      * Writes a packet directly to the client channel.
      * Uses ctx.writeAndFlush so the full outbound pipeline (encryption, etc.) is applied.
      */
-    public void writeCopiedPacket(LoginPluginMessagePacket packet) {
+    protected void writeCopiedPacket(LoginPluginMessagePacket packet) {
         logger.debug("[B->F][write] {}", packet);
         LoginPluginMessagePacket copiedPacket = LoginPluginPacketCopies.copy(packet);
 
@@ -229,54 +212,93 @@ public class FrontendInterceptor extends ChannelDuplexHandler   {
         });
     }
 
-    /**
-     * Flushes all buffered packets to the client channel in the correct order, then clears the buffer.
-     */
-    protected void flushBuffer() {
-        logger.debug("[F][V] flushBuffer");
-
-        // REVIEW: shouldn't happen
-        if (this.ctx == null || !this.ctx.channel().isActive()) {
-            return;
-        }
-
-        ctx.executor().execute(() -> {
-            if (this.clientProtocolVersion.lessThan(ProtocolVersion.MINECRAFT_1_20_2)) {
-                ctx.pipeline().remove(this); // No LoginAcknowledgedPacket
-            } else {
-                this.waitingLoginAcknowledgedPacket = true;
-            }
-
-            // Send all buffered packets to the player
-            Object packet;
-            while ((packet = pendingMessages.poll()) != null) {
-                ctx.pipeline().write(packet);
-
-                if (packet instanceof SetCompressionPacket) {
-                    ctx.pipeline().flush();
-
-                    // Restore any temporarily removed handlers to their original positions in the pipeline
-                    // Remove MinecraftVarintLengthEncoder
-                    restorePipeline();
-                }
-            }
-
-            ctx.pipeline().flush();
-        });
-    }
-
     // -------------------------------------------------------------------------
     // Private helpers
     // -------------------------------------------------------------------------
 
+    /**
+     * Cleans up session state and releases any buffered packets.
+     * <p>
+     * Safe to call multiple times (playerUUID null-check guards re-entrancy).
+     */
+    private void cleanup() {
+        if (playerUUID != null && session != null) {
+            session.close();
+            playerUUID = null;
+        }
+
+        writePendingPackets();
+    }
+
+    /**
+     * Create a new entry into the ProxyLoginSession.sessions based on the playerUUID to establish connection with
+     *  BackendInterceptor later.
+     */
     private void createEntryProxyLoginSession(ServerLoginSuccessPacket serverLoginSuccessPacket) {
         playerUUID = serverLoginSuccessPacket.getUuid();
         session = ProxyLoginSession.open(playerUUID, this);
     }
 
     /**
-     * Restore any temporarily removed handlers to their original positions in the pipeline
-     * Remove MinecraftVarintLengthEncoder
+     * In case of clientProtocolVersion >= ProtocolVersion.MINECRAFT_1_20_2, this method should be executed so that
+     *  it restores the MinecraftConnection.state to the correct one. Also, it removes this handler from the pipeline
+     *  and flushes all buffered packets.
+     */
+    private void finishFrontendLogin(ChannelHandlerContext ctx) {
+        waitingLoginAcknowledgedPacket = false;
+
+        ctx.executor().execute(() -> {
+            MinecraftConnection minecraftConnection = ctx.pipeline().get(MinecraftConnection.class);
+            if (minecraftConnection != null) {
+                minecraftConnection.setState(StateRegistry.CONFIG);
+            }
+
+            removeSelf();
+            writePendingPackets();
+            ctx.flush();
+        });
+    }
+    /**
+     * Prepare pipeline removing unnecessary handlers and changing MinecraftConnection.state to LOGIN.
+     */
+    private void preparePipeline(ChannelHandlerContext ctx) {
+        if (pipelinePrepared) {
+            return;
+        }
+        pipelinePrepared = true;
+
+        ctx.executor().execute(() -> {
+            ctx.fireChannelRead(new LoginAcknowledgedPacket());
+
+            stealthPipeline.removeIfPresent(ctx, MinecraftCompressorAndLengthEncoder.class);
+            stealthPipeline.removeIfPresent(ctx, MinecraftCompressDecoder.class);
+
+            if (ctx.pipeline().get(MinecraftVarintLengthEncoder.class) == null) {
+                ChannelHandlerContext decoder = ctx.pipeline().context(MinecraftDecoder.class);
+                if (decoder != null) {
+                    ctx.pipeline().addBefore(decoder.name(), TEMP_FRAME_ENCODER, MinecraftVarintLengthEncoder.INSTANCE);
+                }
+            }
+
+            MinecraftConnection minecraftConnection = ctx.pipeline().get(MinecraftConnection.class);
+            if (minecraftConnection != null) {
+                minecraftConnection.setState(StateRegistry.LOGIN);
+            }
+        });
+    }
+
+    /**
+     * Removes this handler from the pipeline.
+     */
+    private void removeSelf() {
+        if (ctx.pipeline().context(this) != null) {
+            ctx.pipeline().remove(this);
+        }
+    }
+
+    /**
+     * Restore any temporarily removed handlers to their original positions in the pipeline and remove
+     *  MinecraftVarintLengthEncoder that was artificially added to the pipeline.
      */
     private void restorePipeline() {
         // Remove MinecraftVarintLengthEncoder
@@ -287,19 +309,16 @@ public class FrontendInterceptor extends ChannelDuplexHandler   {
     }
 
     /**
-     * Cleans up session state and releases any buffered packets.
-     * Safe to call multiple times (playerUUID null-check guards re-entrancy).
+     * Flushes all buffered packets to the client channel in the correct order.
      */
-    private void cleanup() {
-        if (playerUUID != null) {
-            session.close(playerUUID);
-            playerUUID = null;
-        }
-
-        // Release any ByteBufs still sitting in the buffer to avoid memory leaks
-        Object packet;
-        while ((packet = pendingMessages.poll()) != null) {
-            ReferenceCountUtil.release(packet);
+    private void writePendingPackets() {
+        PendingWrite pendingWrite;
+        while ((pendingWrite = pendingWrites.poll()) != null) {
+            ctx.write(pendingWrite.message(), pendingWrite.promise());
+            if (pendingWrite.message() instanceof SetCompressionPacket) {
+                ctx.flush();
+                restorePipeline();
+            }
         }
     }
 }

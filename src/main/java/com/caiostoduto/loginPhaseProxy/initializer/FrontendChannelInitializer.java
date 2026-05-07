@@ -23,8 +23,8 @@ public class FrontendChannelInitializer extends ChannelInitializer<Channel> {
             throw new RuntimeException("Failed to invoke initChannel", e);
         }
 
-        // Add our handlers before any of Velocity's handlers, so we can sniff the connection before Velocity does and decide what
-        //  to do with it.
+        // Add our handlers before any of Velocity's handlers, so we can sniff the connection before Velocity does
+        //  and decide what to do with it.
         ch.pipeline().addBefore("handler", BuildConstants.ID, new FrontendInterceptor());
     }
 }

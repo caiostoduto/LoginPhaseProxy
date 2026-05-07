@@ -48,29 +48,13 @@ public class BackendInterceptor extends ChannelDuplexHandler {
                 }
 
                 // Send to the player via frontendInterceptor
+                session.trackLoginPluginMessage(loginPluginMessagePacket);
                 session.frontendInterceptor.writeCopiedPacket(loginPluginMessagePacket);
                 ReferenceCountUtil.release(msg); // Release the original
                 return;
             }
-            case SetCompressionPacket setCompressionPacket -> {
-                ctx.executor().execute(() -> {
-                    // Removes this interceptor from the pipeline on the event loop thread.
-                    ctx.pipeline().remove(this);
-                    // Flushes any pending writes first to avoid dropping in-flight packets.
-                    ctx.flush();
-
-                    session.unlink();
-                });
-
-                // Backend login finished → tear down both interceptors
-                if (session != null) {
-                    if (session.frontendInterceptor != null) {
-                        // Flushes all buffered packets to the client channel in the correct order, then clears the buffer.
-                        session.frontendInterceptor.flushBuffer();
-                    }
-                } else {
-                    logger.warn("[B] ServerLoginSuccess arrived but frontend is null — cannot flush");
-                }
+            case ServerLoginSuccessPacket ignored -> {
+                completeBackendLogin(ctx);
             }
             default -> {}
         }
@@ -87,7 +71,7 @@ public class BackendInterceptor extends ChannelDuplexHandler {
         logger.debug("[B][V->S] {}", msg.getClass().getName());
 
         switch (msg) {
-            case ServerLoginPacket serverLoginPacket -> {
+            case ServerLoginPacket ignored -> {
                 // Velocity is sending the login handshake to the backend — link the session now
                 linkProxyLoginSession((ServerLoginPacket) msg);
             }
@@ -105,7 +89,7 @@ public class BackendInterceptor extends ChannelDuplexHandler {
      * Writes a packet directly to the backend channel.
      * Uses ctx.writeAndFlush so the full outbound pipeline (encryption, etc.) is applied.
      */
-    public void writeCopiedPacket(LoginPluginResponsePacket packet) {
+    protected void writeCopiedPacket(LoginPluginResponsePacket packet) {
         logger.debug("[F->B][write] {}", packet);
         LoginPluginResponsePacket copiedPacket = LoginPluginPacketCopies.copy(packet);
 
@@ -122,10 +106,34 @@ public class BackendInterceptor extends ChannelDuplexHandler {
     // -------------------------------------------------------------------------
 
     /**
+     * Continue the flow by flushing the buffer from FrontendInterceptor and removing this from the pipeline.
+     */
+    private void completeBackendLogin(ChannelHandlerContext ctx) {
+        ProxyLoginSession currentSession = session;
+
+        if (currentSession == null || currentSession.frontendInterceptor == null) {
+            logger.warn("[B] backend login completed but frontend session is missing; cannot flush");
+        } else {
+            if (currentSession.hasOutstandingLoginPluginMessageIds()) {
+                logger.warn("[B] backend login completed with unanswered LoginPluginMessage ids; flushing anyway");
+            }
+            currentSession.frontendInterceptor.flushBuffer();
+        }
+
+        ctx.executor().execute(() -> {
+            if (ctx.pipeline().context(this) != null) {
+                ctx.pipeline().remove(this);
+            }
+            ctx.flush();
+
+            if (currentSession != null) {
+                currentSession.unlink();
+            }
+        });
+    }
+
+    /**
      * Looks up the session created by FrontendInterceptor and links this backend to it.
-     * If the session is not found (frontend hasn't registered yet), logs a warning.
-     * The caller must handle the null case — session will remain null and subsequent
-     * null-guards in channelRead will prevent NPEs.
      */
     private void linkProxyLoginSession(ServerLoginPacket loginPacket) {
         UUID playerUUID = loginPacket.getHolderUuid();

@@ -7,6 +7,9 @@ public final class LoginPluginPacketCopies {
 
     private LoginPluginPacketCopies() {}
 
+    /**
+     * Create a copy of LoginPluginMessagePacket
+     */
     public static LoginPluginMessagePacket copy(LoginPluginMessagePacket packet) {
         return new LoginPluginMessagePacket(
                 packet.getId(),
@@ -15,6 +18,9 @@ public final class LoginPluginPacketCopies {
         );
     }
 
+    /**
+     * Create a copy of LoginPluginResponsePacket
+     */
     public static LoginPluginResponsePacket copy(LoginPluginResponsePacket packet) {
         return new LoginPluginResponsePacket(
                 packet.getId(),
