@@ -13,7 +13,7 @@ import static com.caiostoduto.loginPhaseProxy.Constants.logger;
 
 @Plugin(
         id = BuildConstants.ID,
-        name = "LoginPhaseProxy",
+        name = BuildConstants.NAME,
         version = BuildConstants.VERSION,
         description = BuildConstants.DESCRIPTION,
         url = "https://github.com/caiostoduto/LoginPhaseProxy",
