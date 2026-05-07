@@ -28,16 +28,15 @@ So, yeah, *basically black magic* 🪄🔮. Yayyyy!
 
 ## 🔁 Compatibility
 
-| Author(s)   | Plugin/Mod/Loader                   | Compatibility             | Version |
-|-------------|-------------------------------------|---------------------------|---------|
+| Author(s)   | Plugin/Mod/Loader                  | Compatibility             | Version |
+|-------------|------------------------------------|---------------------------|---------|
 | [Skidam](https://github.com/Skidamek)             | [AutoModpack](https://github.com/Skidamek/AutoModpack) (Fabric/Forge/Neoforge) | ✅ Compatible (port ≠ -1) | 4.X      |
-| [Skidam](https://github.com/Skidamek)             | [AutoModpack](https://github.com/Skidamek/AutoModpack) (Velocity)              | 🚧 Planned                 | -       |
+| [Skidam](https://github.com/Skidamek)             | [AutoModpack](https://github.com/Skidamek/AutoModpack) (Velocity)             | 🚧 Planned                 | -       |
 | [FabricMC](https://fabricmc.net/)                 | Fabric | ✅ Compatible | all     |
 | [NeoForged](https://neoforged.net/)               | NeoForge | ✅ Compatible | all     |
-| [MinecraftForge](https://minecraftforge.net)      | Forge (1.13 - 1.20.1) | 🚫 Incompatible<sup>*</sup> | all     |
-| [MinecraftForge](https://minecraftforge.net)      | Forge (other versions) | ✅ Compatible | all     |
+| [MinecraftForge](https://minecraftforge.net)      | Forge | ✅ Compatible<sup>*</sup> | all     |
 
-> <sup>*</sup> Currently it is incompatible with other plugins that also modify the Velocity channel pipeline, such as [ViaProxy](https://github.com/ViaVersion/ViaProxy), [Ambassador](https://github.com/adde0109/Ambassador), etc.
+> <sup>*</sup> Forge versions 1.13 to 1.20.1 require [Ambassador](https://github.com/adde0109/Ambassador) to work.
 
 ## 💖 Acknowledgement
 
