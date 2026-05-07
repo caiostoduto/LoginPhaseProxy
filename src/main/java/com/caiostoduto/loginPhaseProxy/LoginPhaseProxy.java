@@ -6,6 +6,7 @@ import com.velocitypowered.api.event.Subscribe;
 import com.velocitypowered.api.event.proxy.ProxyInitializeEvent;
 import com.velocitypowered.api.plugin.Plugin;
 import com.velocitypowered.api.proxy.ProxyServer;
+import org.bstats.velocity.Metrics;
 import org.slf4j.Logger;
 
 import static com.caiostoduto.loginPhaseProxy.Constants.logger;
@@ -20,10 +21,13 @@ import static com.caiostoduto.loginPhaseProxy.Constants.logger;
 public class LoginPhaseProxy {
 
     private final ProxyServer proxy;
+    private final Metrics.Factory metricsFactory;
 
     @Inject
-    public LoginPhaseProxy(ProxyServer proxy, Logger logger) {
+    public LoginPhaseProxy(ProxyServer proxy, Logger logger, Metrics.Factory metricsFactory) {
         this.proxy = proxy;
+        this.metricsFactory = metricsFactory;
+
         Constants.logger = logger;
 
 //        Configurator.setLevel("loginphaseproxy", Level.DEBUG);
@@ -41,5 +45,9 @@ public class LoginPhaseProxy {
                     + "This usually means the running Velocity build changed its private internals.", e);
             throw e;
         }
+
+        // Embed bStats to the plugin
+        int pluginId = 31141;
+        Metrics metrics = metricsFactory.make(this, pluginId);
     }
 }

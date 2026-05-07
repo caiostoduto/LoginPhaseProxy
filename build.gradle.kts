@@ -23,6 +23,7 @@ dependencies {
 
     // Additional dependencies
     compileOnly("io.netty:netty-transport:4.2.10.Final")
+    implementation("org.bstats:bstats-velocity:3.2.1")
 }
 
 java {
@@ -37,7 +38,7 @@ tasks {
     shadowJar {
         // Relocate bundled dependencies to avoid conflicts with other plugins
         // that might shade the same library. Replace with your group ID.
-        // relocate("com.example.somelibrary", "com.yourgroup.yourplugin.libs.somelibrary")
+         relocate("org.bstats", project.group.toString() + ".libs.bstats")
 
         // Strip unnecessary files from the shadow jar
         minimize()
