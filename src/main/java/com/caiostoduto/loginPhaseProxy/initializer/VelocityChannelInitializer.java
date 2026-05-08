@@ -19,7 +19,7 @@ public class VelocityChannelInitializer {
             // com.velocitypowered.proxy.network.ConnectionManager
             Object connectionManager = readRequiredField(proxy, "cm", "proxy.cm");
 
-            // com.velocitypowered.proxy.network.ServerChannelInitializer
+            // com.velocitypowered.proxy.network.ServerChannelInitializerHolder
             Object serverHolder = readRequiredField(
                     connectionManager,
                     "serverChannelInitializer",
@@ -29,7 +29,7 @@ public class VelocityChannelInitializer {
                     "proxy.cm.serverChannelInitializer.initializer",
                     InitializerSide.FRONTEND);
 
-            // com.velocitypowered.proxy.network.BackendChannelInitializer
+            // com.velocitypowered.proxy.network.BackendChannelInitializerHolder
             Object backendHolder = readRequiredField(
                     connectionManager,
                     "backendChannelInitializer",

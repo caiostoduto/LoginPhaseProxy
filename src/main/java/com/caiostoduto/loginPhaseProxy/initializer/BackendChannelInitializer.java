@@ -25,6 +25,6 @@ public class BackendChannelInitializer extends ChannelInitializer<Channel> {
 
         // Add our handlers before any of Velocity's handlers, so we can sniff the connection before Velocity does
         //  and decide what to do with it.
-        ch.pipeline().addLast( BuildConstants.ID, new BackendInterceptor());
+        ch.pipeline().addLast(BuildConstants.ID, new BackendInterceptor());
     }
 }
