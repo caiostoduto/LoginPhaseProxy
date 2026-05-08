@@ -28,7 +28,7 @@ jobs:
           EOF
 
   build:
-    uses: caiostoduto/LoginPhaseProxy/.github/workflows/build.yml@main
+    uses: ./.github/workflows/build.yml
     # secrets: inherit
 
   release:
