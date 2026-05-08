@@ -17,7 +17,7 @@ jobs:
 
       - name: Update Modrinth project description
         env:
-          MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+          MODRINTH_API_TOKEN: ${{ secrets.MODRINTH_API_TOKEN }}
         run: |
           # Read README.md
           README_CONTENT=$(cat README.md)
@@ -38,5 +38,5 @@ jobs:
           curl -X PATCH "https://api.modrinth.com/v2/project/loginphaseproxy" \
             -H "Content-Type: application/json" \
             -H "User-Agent: loginphaseproxy" \
-            -H "Authorization: $MODRINTH_TOKEN" \
+            -H "Authorization: $MODRINTH_API_TOKEN" \
             --data "$JSON_BODY"
