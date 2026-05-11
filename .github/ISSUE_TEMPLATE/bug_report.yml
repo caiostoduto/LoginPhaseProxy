@@ -50,7 +50,7 @@ body:
     attributes:
       label: Minecraft version
       description: The Minecraft version(s) where this bug occurs in.
-      placeholder: 26.1
+      placeholder: "26.1"
     validations:
       required: true
   - type: input
