@@ -58,13 +58,13 @@ body:
     attributes:
       label: Velocity version
       description: The Velocity version(s) where this bug occurs in.
-      placeholder: 3.5.0-SNAPSHOT \#595
+      placeholder: "3.5.0-SNAPSHOT #595"
     validations:
       required: true
   - type: input
     id: backend_version
     attributes:
-      label: Backend Mod Loader versions
+      label: Backend mod loader version
       description: The backend mod loader with loader version where this bug occurs in.
       placeholder: Fabric 0.19.2
     validations:
