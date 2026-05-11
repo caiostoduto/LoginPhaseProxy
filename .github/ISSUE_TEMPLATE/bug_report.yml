@@ -1,0 +1,98 @@
+name: Bug Report
+description: Something doesn't seem correct and it might be a bug
+labels: []
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug description
+      description: |
+        A clear and concise description of what the bug is.
+        Is it a game crash, an unexpected behavior, or has something gone wrong?
+        If applicable, add screenshots to help explain the bug.
+      placeholder: Tell us what you see!
+    validations:
+      required: true
+  - type: textarea
+    id: to-reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Steps to reproduce the bug
+      placeholder: |
+        1. Create a world
+        2. Wait until midnight
+        3. Hug a creeper
+    validations:
+      required: true
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+      placeholder: The creeper explodes
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual behavior
+      description: What actually happened?
+      placeholder: The creeper launches itself into the sky
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: |-
+        Please send the corresponding Minecraft logs (Velocity, Backend, Player, etc.) from the `logs` folder here.
+        Please upload the log files as an attachment, or upload the log to [mclo.gs](https://mclo.gs/) and paste the url here - mclo.gs sanitizes sensitive information such as ip addresses.
+        Please refrain from pasting the entire log file directly.
+      placeholder: https://mclo.gs/
+  - type: input
+    id: minecraft_version
+    attributes:
+      label: Minecraft version
+      description: The Minecraft version(s) where this bug occurs in.
+      placeholder: 26.1
+    validations:
+      required: true
+  - type: input
+    id: velocity_version
+    attributes:
+      label: Velocity version
+      description: The Velocity version(s) where this bug occurs in.
+      placeholder: 3.5.0-SNAPSHOT \#595
+    validations:
+      required: true
+  - type: input
+    id: backend_version
+    attributes:
+      label: Backend Mod Loader versions
+      description: The backend mod loader with loader version where this bug occurs in.
+      placeholder: Fabric 0.19.2
+    validations:
+      required: false
+  - type: input
+    id: plugin-version
+    attributes:
+      label: LoginPhaseProxy version
+      description: The LoginPhaseProxy version(s) where this bug occurs in.
+      placeholder: 0.1.0-alpha
+    validations:
+      required: true
+  - type: textarea
+    id: other-information
+    attributes:
+      label: Other information
+      description: Other useful information to this bug report, e.g. other related mod version(s). Leave empty if there is none.
+      placeholder: The issue only occurs if the player is in survival mode
+  - type: checkboxes
+    id: check-list
+    attributes:
+      label: Check list
+      options:
+        - label: I have verified that the issue persists in the latest version of the mod.
+          required: true
+        - label: I have searched the existing issues and confirmed that this is not a duplicate.
+          required: true
+        - label: I have provided all the necessary information to reproduce the issue.
+          required: true
+        - label: I have verified that the issue is completely related to the LoginPhaseProxy.
+          required: true
