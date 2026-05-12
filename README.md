@@ -28,9 +28,10 @@ So, yeah, *basically black magic* 🪄🔮. Yayyyy!
 
 ## 🔁 Compatibility
 
-| Author(s)   | Mod                     | Compatibility             |
-|-------------|-------------------------|---------------------------|
-| [Skidam](https://github.com/Skidamek) | [AutoModpack](https://github.com/Skidamek/AutoModpack) (Fabric/Forge/Neoforge) | ✅ Compatible |
+| Author(s)                               | Mod                                                                             | Compatibility   |
+|-----------------------------------------|---------------------------------------------------------------------------------|-----------------|
+| [Skidam](https://github.com/Skidamek)   | [AutoModpack](https://github.com/Skidamek/AutoModpack) (Fabric/Forge/Neoforge)  | ✅ Compatible    |
+| [adde0109](https://github.com/adde0109) | [Ambassador](https://github.com/adde0109/Ambassador) (Velocity)                 | 🚫 Incompatible |
 
 ## 🙏 Acknowledgement
 
