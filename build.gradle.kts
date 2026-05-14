@@ -1,3 +1,5 @@
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar.Companion.shadowJar
+
 plugins {
     java
     id("com.gradleup.shadow") version "9.4.1"
@@ -18,10 +20,23 @@ val downloadVelocityBuild = tasks.register<DownloadVelocityBuild>("downloadVeloc
     outputFile.set(layout.buildDirectory.file("velocity/$pinnedVelocityVersion/$pinnedVelocityBuild/velocity.jar"))
 }
 
+val downloadAmbassadorBuild = tasks.register<DownloadModrinthVersion>("downloadAmbassadorBuild") {
+    projectId.set("ambassador")
+    versionId.set("YeQbhgna")   // v1.4.5
+
+    outputFile.set(
+        layout.buildDirectory.file("mods/Ambassador.jar")
+    )
+}
+
 dependencies {
+    // Velocity
     compileOnly("com.velocitypowered:velocity-api:$pinnedVelocityVersion")
     annotationProcessor("com.velocitypowered:velocity-api:$pinnedVelocityVersion")
     compileOnly(files(downloadVelocityBuild.flatMap { it.outputFile }))
+
+    // Ambassador
+    compileOnly(files(downloadAmbassadorBuild.flatMap { it.outputFile }))
 
     // Additional dependencies
     compileOnly("io.netty:netty-transport:4.2.10.Final")

@@ -4,6 +4,7 @@ import com.caiostoduto.loginPhaseProxy.BuildConstants;
 import com.caiostoduto.loginPhaseProxy.intercept.FrontendInterceptor;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelInitializer;
+import com.velocitypowered.proxy.network.Connections;
 
 import static com.caiostoduto.loginPhaseProxy.initializer.VelocityChannelInitializer.method;
 
@@ -25,6 +26,6 @@ public class FrontendChannelInitializer extends ChannelInitializer<Channel> {
 
         // Add our handlers before any of Velocity's handlers, so we can sniff the connection before Velocity does
         //  and decide what to do with it.
-        ch.pipeline().addBefore("handler", BuildConstants.ID, new FrontendInterceptor());
+        ch.pipeline().addBefore(Connections.HANDLER, BuildConstants.ID, new FrontendInterceptor());
     }
 }
