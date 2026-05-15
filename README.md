@@ -2,6 +2,14 @@
 
 > Disclaimer: This plugin is in early development and may contain bugs and performance issues. Use it at your own risk.
 
+## 🔁 When to use
+
+| Author(s)                               | Mod                                                                            |
+|-----------------------------------------|--------------------------------------------------------------------------------|
+| [Skidam](https://github.com/Skidamek)   | [AutoModpack](https://github.com/Skidamek/AutoModpack) (Fabric/Forge/Neoforge) |
+
+> You're welcome to suggest new use cases via [Issue](https://github.com/caiostoduto/LoginPhaseProxy/issues/new/choose) or [Pull Request](https://github.com/caiostoduto/LoginPhaseProxy/pulls)!
+
 ## ❓ What does it solve (detailed)
 
 ![Sequence Diagram](/docs/sequence_diagram_original.png)
@@ -25,13 +33,6 @@ With that, our plugin watches the Login Phase player connection until it sees a 
 If the backend server sends a LoginPluginMessagePacket<sup>(10)</sup> during its Login Phase, our plugin will intercept it and send it to the player<sup>(11)</sup>, and if the player sends a LoginPluginResponsePacket<sup>(12)</sup>, our plugin will intercept it and send it to the backend server<sup>(13)</sup>. This way, we can effectively proxy the LoginPluginMessagePacket and LoginPluginResponsePacket between the player and the backend server, allowing modded backend servers to work with Velocity without any issues. Then, when the backend server ends the Login Phase sending the ServerLoginSuccessPacket<sup>(15)</sup>, our plugin will flush the buffered packets to the player, completing the Login Phase and allowing the player to join the backend server as normal. Afterwards, if the user sends a LoginAcknowledgedPacket (clientProtocolVersion >= ProtocolVersion.MINECRAFT_1_20_2)<sup>(16)</sup> after the Login Phase is complete, our plugin will simply ignore it, as it is not expected to be sent by the player at that point. Finally, the plugin will restore the [MinecraftDecoder](https://github.com/PaperMC/Velocity/blob/ad8de4361c9d6e93b818d3381e85b14e0c90ad05/proxy/src/main/java/com/velocitypowered/proxy/protocol/netty/MinecraftDecoder.java#L34) state to its previous state (Config Phase).
 
 So, yeah, *basically black magic* 🪄🔮. Yayyyy!
-
-## 🔁 Compatibility
-
-| Author(s)                               | Mod                                                                             | Compatibility   |
-|-----------------------------------------|---------------------------------------------------------------------------------|-----------------|
-| [Skidam](https://github.com/Skidamek)   | [AutoModpack](https://github.com/Skidamek/AutoModpack) (Fabric/Forge/Neoforge)  | ✅ Compatible    |
-| [adde0109](https://github.com/adde0109) | [Ambassador](https://github.com/adde0109/Ambassador) (Velocity)                 | 🚫 Incompatible |
 
 ## 🙏 Acknowledgement
 
