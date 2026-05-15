@@ -18,8 +18,8 @@ public class ProxyLoginSession {
     private static final ConcurrentMap<UUID, ProxyLoginSession> sessions = new ConcurrentHashMap<>();
 
     // Volatile so cross-thread reads always see the latest write
-    public volatile FrontendInterceptor frontendInterceptor;
-    public volatile BackendInterceptor backendInterceptor;
+    public volatile FrontendInterceptor frontendBridge;
+    public volatile BackendInterceptor backendBridge;
 
     private final UUID playerUUID;
     private final AtomicReference<State> state = new AtomicReference<>(State.FRONTEND_OPEN);
@@ -45,13 +45,13 @@ public class ProxyLoginSession {
         Objects.requireNonNull(frontend, "frontend");
 
         ProxyLoginSession session = new ProxyLoginSession(playerUUID);
-        session.frontendInterceptor = frontend;
+        session.frontendBridge = frontend;
 
         // putIfAbsent guards against the (unlikely) duplicate-UUID edge case
         ProxyLoginSession existing = sessions.putIfAbsent(playerUUID, session);
         if (existing != null) {
             // Session already existed — reuse it and just attach the frontend
-            existing.frontendInterceptor = frontend;
+            existing.frontendBridge = frontend;
             return existing;
         }
 
@@ -74,7 +74,7 @@ public class ProxyLoginSession {
             return null;
         }
 
-        session.backendInterceptor = backend;
+        session.backendBridge = backend;
         session.transition(State.BACKEND_LINKED);
         return session;
     }
@@ -84,7 +84,7 @@ public class ProxyLoginSession {
      * Unlinks the existing session's backend.
      */
     public void unlink() {
-        this.backendInterceptor = null;
+        this.backendBridge = null;
         transition(State.BACKEND_UNLINKED);
     }
 
@@ -121,14 +121,18 @@ public class ProxyLoginSession {
         return !outstandingLoginPluginMessageIds.isEmpty();
     }
 
+    public Set<Integer> outstandingLoginPluginMessageIds() {
+        return Set.copyOf(outstandingLoginPluginMessageIds);
+    }
+
     /**
      * Removes this session from the registry. Safe to call from any thread.
      */
     public void close() {
         sessions.remove(this.playerUUID, this);
         outstandingLoginPluginMessageIds.clear();
-        this.backendInterceptor = null;
-        this.frontendInterceptor = null;
+        this.backendBridge = null;
+        this.frontendBridge = null;
         state.set(State.CLOSED);
     }
 
@@ -137,7 +141,7 @@ public class ProxyLoginSession {
      * @return true if the BackendInterceptor already linked to this session
      */
     public boolean isBackendLinked() {
-        return state.get() == State.BACKEND_LINKED && backendInterceptor != null;
+        return state.get() == State.BACKEND_LINKED && backendBridge != null;
     }
 
     /**

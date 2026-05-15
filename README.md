@@ -2,6 +2,14 @@
 
 > Disclaimer: This plugin is in early development and may contain bugs and performance issues. Use it at your own risk.
 
+## 🔁 When to use
+
+| Author(s)                               | Mod                                                                            |
+|-----------------------------------------|--------------------------------------------------------------------------------|
+| [Skidam](https://github.com/Skidamek)   | [AutoModpack](https://github.com/Skidamek/AutoModpack) (Fabric/Forge/Neoforge) |
+
+> You're welcome to suggest new use cases via [Issue](https://github.com/caiostoduto/LoginPhaseProxy/issues/new/choose) or [Pull Request](https://github.com/caiostoduto/LoginPhaseProxy/pulls)!
+
 ## ❓ What does it solve (detailed)
 
 ![Sequence Diagram](/docs/sequence_diagram_original.png)
@@ -26,13 +34,7 @@ If the backend server sends a LoginPluginMessagePacket<sup>(10)</sup> during its
 
 So, yeah, *basically black magic* 🪄🔮. Yayyyy!
 
-## 🔁 Compatibility
+## 🙏 Acknowledgements
 
-| Author(s)                               | Mod                                                                             | Compatibility   |
-|-----------------------------------------|---------------------------------------------------------------------------------|-----------------|
-| [Skidam](https://github.com/Skidamek)   | [AutoModpack](https://github.com/Skidamek/AutoModpack) (Fabric/Forge/Neoforge)  | ✅ Compatible    |
-| [adde0109](https://github.com/adde0109) | [Ambassador](https://github.com/adde0109/Ambassador) (Velocity)                 | 🚫 Incompatible |
-
-## 🙏 Acknowledgement
-
-Huge thanks to [Skidam](https://github.com/Skidamek), who inspired me to create this plugin!
+- [Skidam](https://github.com/Skidamek), who inspired me to create this plugin!
+- [lucas-gcp](https://github.com/lucas-gcp), who supported me and helped with testing!

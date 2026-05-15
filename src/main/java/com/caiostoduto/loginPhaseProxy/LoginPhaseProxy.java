@@ -20,17 +20,15 @@ import static com.caiostoduto.loginPhaseProxy.Constants.logger;
         authors = {"Caio Stoduto"})
 public class LoginPhaseProxy {
 
-    private final ProxyServer proxy;
     private final Metrics.Factory metricsFactory;
 
     @Inject
     public LoginPhaseProxy(ProxyServer proxy, Logger logger, Metrics.Factory metricsFactory) {
-        this.proxy = proxy;
         this.metricsFactory = metricsFactory;
 
         Constants.logger = logger;
+        Constants.server = proxy;
 
-//        Configurator.setLevel("loginphaseproxy", Level.DEBUG);
         logger.debug("Logger level set to DEBUG");
         logger.info("Plugin initialized.");
     }
@@ -39,7 +37,7 @@ public class LoginPhaseProxy {
     public void onProxyInitialization(ProxyInitializeEvent event) {
         logger.debug("Injecting Velocity proxy");
         try {
-            VelocityChannelInitializer.inject(this.proxy);
+            VelocityChannelInitializer.inject(Constants.server);
         } catch (VelocityChannelInitializer.VelocityCompatibilityException e) {
             logger.error("LoginPhaseProxy could not hook into Velocity's network initializers. "
                     + "This usually means the running Velocity build changed its private internals.", e);

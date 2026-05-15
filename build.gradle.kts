@@ -1,3 +1,5 @@
+import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar.Companion.shadowJar
+
 plugins {
     java
     id("com.gradleup.shadow") version "9.4.1"
@@ -6,7 +8,31 @@ plugins {
 
 repositories {
     mavenCentral()
-    maven("https://repo.papermc.io/repository/maven-public/")
+
+    // PaperMC Maven (https://docs.papermc.io/velocity/dev/creating-your-first-plugin/#setting-up-the-dependency)
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = "PaperMC"
+                url = uri("https://repo.papermc.io/repository/maven-public/")
+            }
+        }
+        filter {
+            includeGroup("com.velocitypowered")
+        }
+    }
+
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = "Modrinth"
+                url = uri("https://api.modrinth.com/maven")
+            }
+        }
+        filter {
+            includeGroup("maven.modrinth")
+        }
+    }
 }
 
 val pinnedVelocityVersion = "3.5.0-SNAPSHOT"
@@ -19,13 +45,25 @@ val downloadVelocityBuild = tasks.register<DownloadVelocityBuild>("downloadVeloc
 }
 
 dependencies {
+    // Velocity
     compileOnly("com.velocitypowered:velocity-api:$pinnedVelocityVersion")
     annotationProcessor("com.velocitypowered:velocity-api:$pinnedVelocityVersion")
     compileOnly(files(downloadVelocityBuild.flatMap { it.outputFile }))
 
+    // Ambassador
+    compileOnly("maven.modrinth:ambassador:1.4.5") {
+        artifact {
+            name = "Ambassador-Velocity"
+            classifier = "all"
+            extension = "jar"
+        }
+    }
+
+    // bStats
+    implementation("org.bstats:bstats-velocity:3.2.1")
+
     // Additional dependencies
     compileOnly("io.netty:netty-transport:4.2.10.Final")
-    implementation("org.bstats:bstats-velocity:3.2.1")
 }
 
 java {
