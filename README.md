@@ -34,6 +34,7 @@ If the backend server sends a LoginPluginMessagePacket<sup>(10)</sup> during its
 
 So, yeah, *basically black magic* 🪄🔮. Yayyyy!
 
-## 🙏 Acknowledgement
+## 🙏 Acknowledgements
 
-Huge thanks to [Skidam](https://github.com/Skidamek), who inspired me to create this plugin!
+- [Skidam](https://github.com/Skidamek), who inspired me to create this plugin!
+- [lucas-gcp](https://github.com/lucas-gcp), who supported me and helped with testing!
