@@ -64,6 +64,12 @@ dependencies {
 
     // Additional dependencies
     compileOnly("io.netty:netty-transport:4.2.10.Final")
+
+    // Tests
+    testImplementation(platform("org.junit:junit-bom:6.0.3"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation(files(downloadVelocityBuild.flatMap { it.outputFile }))
 }
 
 java {
@@ -116,4 +122,8 @@ sourceSets.main.configure { java.srcDir(generateTemplates.map { it.outputs }) }
 
 tasks.compileJava {
     dependsOn(generateTemplates)
+}
+
+tasks.test {
+    useJUnitPlatform()
 }

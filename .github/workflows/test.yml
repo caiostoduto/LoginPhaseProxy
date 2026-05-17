@@ -1,4 +1,4 @@
-name: Build
+name: Test
 
 on:
   push:
@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name != 'workflow_call' }}
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
 
     steps:
@@ -28,14 +28,7 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
 
-      - name: Assemble plugin jar
+      - name: Run tests
         run: |
           chmod +x gradlew
-          ./gradlew shadowJar
-
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: build-artifacts
-          path: |
-            build/libs/*.jar
+          ./gradlew test
