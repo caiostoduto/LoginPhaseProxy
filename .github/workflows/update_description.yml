@@ -35,7 +35,7 @@ jobs:
           JSON_BODY=$(jq -Rn --arg body "$README_CONTENT" '{body: $body}')
 
           # Send to Modrinth
-          curl -X PATCH "https://api.modrinth.com/v2/project/loginphaseproxy" \
+          curl --fail-with-body -X PATCH "https://api.modrinth.com/v2/project/loginphaseproxy" \
             -H "Content-Type: application/json" \
             -H "User-Agent: loginphaseproxy" \
             -H "Authorization: $MODRINTH_API_TOKEN" \
