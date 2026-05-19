@@ -133,8 +133,8 @@ jobs:
           loaders: |
             velocity
           game-versions: |
-            [1.7.2,26.1.2]
-          game-version-filter: none
+            [1.13,26.1.2]
+          game-version-filter: releases
           dependencies: ''  # declare the dependencies explicitly, so mc-publish won't try to load from fabric.mod.json
 
           github-changelog: ${{ steps.changelog.outputs.result }}
