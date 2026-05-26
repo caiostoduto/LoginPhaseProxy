@@ -1,7 +1,5 @@
 **LoginPhaseProxy** is a somewhat "*simple*" Velocity Plugin that allows you to proxy the LoginPluginMessagePacket from backend server to the player and LoginPluginResponsePacket from the player to the backend server. This is useful for modded backend servers that rely on Login Plugin Message communication to work, such as [AutoModpack](https://github.com/Skidamek/AutoModpack).
 
-> Disclaimer: This plugin is in early development and may contain bugs and performance issues. Use it at your own risk.
-
 ## 🔁 When to use
 
 | Author(s)                               | Mod                                                                            |
