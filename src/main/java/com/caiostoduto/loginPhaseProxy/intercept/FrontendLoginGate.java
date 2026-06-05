@@ -26,11 +26,17 @@ final class FrontendLoginGate {
 
     private ProtocolVersion clientProtocolVersion;
     private ChannelHandlerContext ctx;
-    private boolean waitingLoginAcknowledgedPacket;
-    private volatile boolean clientAcknowledged;
     private boolean pipelinePrepared;
 
     private record PendingWrite(Object message, ChannelPromise promise) {}
+
+    private enum LoginPhase {
+        EARLY_LOGIN,
+        WAITING_ACK,
+        ACKNOWLEDGED
+    }
+
+    LoginPhase currentPhase = LoginPhase.EARLY_LOGIN;
 
     FrontendLoginGate(FrontendInterceptor owner) {
         this.owner = owner;
@@ -49,10 +55,10 @@ final class FrontendLoginGate {
     }
 
     boolean waitingLoginAcknowledgedPacket() {
-        return waitingLoginAcknowledgedPacket;
+        return currentPhase == LoginPhase.WAITING_ACK;
     }
 
-    boolean clientAcknowledged() { return clientAcknowledged; }
+    boolean clientAcknowledged() { return currentPhase == LoginPhase.ACKNOWLEDGED; }
 
     void buffer(Object msg, ChannelPromise promise) {
         pendingWrites.add(new PendingWrite(msg, promise));
@@ -66,21 +72,20 @@ final class FrontendLoginGate {
             return;
         }
 
-        ctx.executor().execute(() -> {
-            if (getClientProtocolVersion() != null && getClientProtocolVersion().lessThan(ProtocolVersion.MINECRAFT_1_20_2)) {
-                removeOwner();
-            } else {
-                waitingLoginAcknowledgedPacket = true;
-            }
+        if (getClientProtocolVersion() != null && getClientProtocolVersion().lessThan(ProtocolVersion.MINECRAFT_1_20_2)) {
+            removeOwner();
+        } else {
+            currentPhase = LoginPhase.WAITING_ACK;
+        }
 
+        ctx.executor().execute(() -> {
             writePendingPackets();
             ctx.flush();
         });
     }
 
     void finishFrontendLogin(ChannelHandlerContext readCtx) {
-        waitingLoginAcknowledgedPacket = false;
-        clientAcknowledged = true;
+        currentPhase = LoginPhase.ACKNOWLEDGED;
 
         // Flip decoder state SYNCHRONOUSLY so the next packet in this same read
         // burst decodes under CONFIG instead of LOGIN.
