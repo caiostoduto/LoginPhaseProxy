@@ -1,6 +1,5 @@
 package com.caiostoduto.loginPhaseProxy.intercept;
 
-import com.caiostoduto.loginPhaseProxy.utils.LoginPluginPacketCopies;
 import com.caiostoduto.loginPhaseProxy.utils.ProxyLoginSession;
 import com.velocitypowered.proxy.protocol.packet.*;
 import io.netty.channel.ChannelDuplexHandler;
@@ -111,7 +110,12 @@ public class BackendInterceptor extends ChannelDuplexHandler {
     public void writeLoginPluginResponse(LoginPluginResponsePacket packet) {
         logger.debug("[F->B][relay] LoginPluginResponse id={} success={}",
                 packet.getId(), packet.isSuccess());
-        LoginPluginResponsePacket copiedPacket = LoginPluginPacketCopies.copy(packet);
+
+        LoginPluginResponsePacket copiedPacket = new LoginPluginResponsePacket(
+                packet.getId(),
+                packet.isSuccess(),
+                packet.content().copy()
+        );
 
         ctx.pipeline().writeAndFlush(copiedPacket).addListener(future -> {
             if (!future.isSuccess()) {

@@ -67,12 +67,14 @@ final class FrontendLoginGate {
     void flushAfterBackendLogin() {
         logger.debug("[F][V->C][flush] pending={}", pendingWrites.size());
 
+        // Flush
         if (ctx == null || !ctx.channel().isActive()) {
             writePendingPackets();
             return;
         }
 
         if (getClientProtocolVersion() != null && getClientProtocolVersion().lessThan(ProtocolVersion.MINECRAFT_1_20_2)) {
+            // Remove FrontendInterceptor from pipeline
             removeOwner();
         } else {
             currentPhase = LoginPhase.WAITING_ACK;
@@ -92,12 +94,14 @@ final class FrontendLoginGate {
         MinecraftConnection mc = readCtx.pipeline().get(MinecraftConnection.class);
         if (mc != null && mc.getState() == StateRegistry.LOGIN) {
             mc.setState(StateRegistry.CONFIG);
-            logger.debug("[F][pipeline] state=CONFIG (sync, in finishFrontendLogin)");
+            logger.debug("[F][pipeline] restored MinecraftConnection state=CONFIG");
         }
+
+        // Remove FrontendInterceptor from pipeline
+        removeOwner();
 
         // Defer only the pipeline surgery + buffer flush (the not channel-safe part).
         readCtx.executor().execute(() -> {
-            removeOwner();
             writePendingPackets();
             readCtx.flush();
         });

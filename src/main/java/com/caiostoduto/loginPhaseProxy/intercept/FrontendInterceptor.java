@@ -1,6 +1,5 @@
 package com.caiostoduto.loginPhaseProxy.intercept;
 
-import com.caiostoduto.loginPhaseProxy.utils.LoginPluginPacketCopies;
 import com.caiostoduto.loginPhaseProxy.utils.ProxyLoginSession;
 import com.velocitypowered.api.network.ProtocolVersion;
 import com.velocitypowered.proxy.connection.MinecraftConnection;
@@ -206,7 +205,11 @@ public class FrontendInterceptor extends ChannelDuplexHandler {
      */
     public void writeLoginPluginMessage(LoginPluginMessagePacket packet) {
         logger.debug("[B->F][relay] LoginPluginMessage id={} channel={}", packet.getId(), packet.getChannel());
-        LoginPluginMessagePacket copiedPacket = LoginPluginPacketCopies.copy(packet);
+        LoginPluginMessagePacket copiedPacket = new LoginPluginMessagePacket(
+                packet.getId(),
+                packet.getChannel(),
+                packet.content().copy()
+        );
 
         ctx.pipeline().writeAndFlush(copiedPacket).addListener(future -> {
             if (!future.isSuccess()) {
