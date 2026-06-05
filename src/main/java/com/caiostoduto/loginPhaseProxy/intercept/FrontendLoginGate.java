@@ -27,6 +27,7 @@ final class FrontendLoginGate {
     private ProtocolVersion clientProtocolVersion;
     private ChannelHandlerContext ctx;
     private boolean waitingLoginAcknowledgedPacket;
+    private volatile boolean clientAcknowledged;
     private boolean pipelinePrepared;
 
     private record PendingWrite(Object message, ChannelPromise promise) {}
@@ -43,9 +44,15 @@ final class FrontendLoginGate {
         this.clientProtocolVersion = clientProtocolVersion;
     }
 
+    ProtocolVersion getClientProtocolVersion() {
+        return clientProtocolVersion != null ? clientProtocolVersion : ProtocolVersion.MINECRAFT_1_20_2;
+    }
+
     boolean waitingLoginAcknowledgedPacket() {
         return waitingLoginAcknowledgedPacket;
     }
+
+    boolean clientAcknowledged() { return clientAcknowledged; }
 
     void buffer(Object msg, ChannelPromise promise) {
         pendingWrites.add(new PendingWrite(msg, promise));
@@ -71,27 +78,20 @@ final class FrontendLoginGate {
         });
     }
 
-    private volatile boolean clientAcknowledged;
-
-    boolean clientAcknowledged() { return clientAcknowledged; }
-
-    ProtocolVersion clientProtocolVersionOrDefault() {
-        return clientProtocolVersion != null
-                ? clientProtocolVersion
-                : ProtocolVersion.MINECRAFT_1_20_2;
-    }
-
     void finishFrontendLogin(ChannelHandlerContext readCtx) {
         waitingLoginAcknowledgedPacket = false;
-        clientAcknowledged = true;   // only addition for the readability fix
+        clientAcknowledged = true;
 
+        // Flip decoder state SYNCHRONOUSLY so the next packet in this same read
+        // burst decodes under CONFIG instead of LOGIN.
+        MinecraftConnection mc = readCtx.pipeline().get(MinecraftConnection.class);
+        if (mc != null && mc.getState() == StateRegistry.LOGIN) {
+            mc.setState(StateRegistry.CONFIG);
+            logger.debug("[F][pipeline] state=CONFIG (sync, in finishFrontendLogin)");
+        }
+
+        // Defer only the pipeline surgery + buffer flush (the not channel-safe part).
         readCtx.executor().execute(() -> {
-            MinecraftConnection minecraftConnection = readCtx.pipeline().get(MinecraftConnection.class);
-            if (minecraftConnection != null) {
-                minecraftConnection.setState(StateRegistry.CONFIG);
-                logger.debug("[F][pipeline] restored MinecraftConnection state=CONFIG");
-            }
-            
             removeOwner();
             writePendingPackets();
             readCtx.flush();

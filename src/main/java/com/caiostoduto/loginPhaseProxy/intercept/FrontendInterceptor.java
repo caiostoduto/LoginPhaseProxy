@@ -164,17 +164,14 @@ public class FrontendInterceptor extends ChannelDuplexHandler {
 
                     if (mc != null && mc.getState() == StateRegistry.LOGIN) {
                         Component reason = disconnect.getReason().getComponent();
-                        ProtocolVersion version = loginGate.clientProtocolVersionOrDefault();
+                        ProtocolVersion version = loginGate.getClientProtocolVersion();
 
                         // Encoder reads connection state to choose the packet id — flip first.
                         mc.setState(StateRegistry.CONFIG);
 
-                        DisconnectPacket fixed = DisconnectPacket.create(reason, version, StateRegistry.CONFIG);
-
                         logger.debug("[F][V->C][fix] re-framed Disconnect LOGIN->CONFIG: {}", reason);
                         ReferenceCountUtil.release(msg);
-                        ctx.write(fixed, promise);
-                        return;
+                        msg = DisconnectPacket.create(reason, version, StateRegistry.CONFIG);
                     }
                 }
                 // Already correct phase (or client never acked) - pass through untouched.
