@@ -36,4 +36,5 @@ So, yeah, *basically black magic* 🪄🔮. Yayyyy!
 
 - [Skidam](https://github.com/Skidamek), who inspired me to create this plugin!
 - [lucas-gcp](https://github.com/lucas-gcp), who supported me and helped with testing!
+- **Suerion**, who helped with testing and provided valuable feedback!
 - All contributors who contributed to this plugin, whether by reporting issues, suggesting features, or contributing code!
