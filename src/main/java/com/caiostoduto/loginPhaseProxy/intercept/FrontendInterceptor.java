@@ -2,11 +2,15 @@ package com.caiostoduto.loginPhaseProxy.intercept;
 
 import com.caiostoduto.loginPhaseProxy.utils.LoginPluginPacketCopies;
 import com.caiostoduto.loginPhaseProxy.utils.ProxyLoginSession;
+import com.velocitypowered.api.network.ProtocolVersion;
+import com.velocitypowered.proxy.connection.MinecraftConnection;
+import com.velocitypowered.proxy.protocol.StateRegistry;
 import com.velocitypowered.proxy.protocol.packet.*;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.util.ReferenceCountUtil;
+import net.kyori.adventure.text.Component;
 import org.adde0109.ambassador.forge.ForgeConstants;
 
 import java.util.UUID;
@@ -151,6 +155,26 @@ public class FrontendInterceptor extends ChannelDuplexHandler {
             }
             case LoginPluginMessagePacket ignored -> {
                 // Send packet (Probably Ambassador)
+            }
+            case DisconnectPacket disconnect -> {
+                // The client may already be in CONFIG when a LOGIN DisconnectPacket is sent.
+                // Re-frame it as CONFIG to avoid 0x00 being interpreted as cookie_request.
+                if (loginGate.clientAcknowledged()) {
+                    MinecraftConnection mc = ctx.pipeline().get(MinecraftConnection.class);
+
+                    if (mc != null && mc.getState() == StateRegistry.LOGIN) {
+                        Component reason = disconnect.getReason().getComponent();
+                        ProtocolVersion version = loginGate.getClientProtocolVersion();
+
+                        // Encoder reads connection state to choose the packet id — flip first.
+                        mc.setState(StateRegistry.CONFIG);
+
+                        logger.debug("[F][V->C][fix] re-framed Disconnect LOGIN->CONFIG: {}", reason);
+                        ReferenceCountUtil.release(msg);
+                        msg = DisconnectPacket.create(reason, version, StateRegistry.CONFIG);
+                    }
+                }
+                // Already correct phase (or client never acked) - pass through untouched.
             }
             default -> {
                 if (loginGate.waitingLoginAcknowledgedPacket()) {

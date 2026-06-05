@@ -26,10 +26,17 @@ final class FrontendLoginGate {
 
     private ProtocolVersion clientProtocolVersion;
     private ChannelHandlerContext ctx;
-    private boolean waitingLoginAcknowledgedPacket;
     private boolean pipelinePrepared;
 
     private record PendingWrite(Object message, ChannelPromise promise) {}
+
+    private enum LoginPhase {
+        EARLY_LOGIN,
+        WAITING_ACK,
+        ACKNOWLEDGED
+    }
+
+    LoginPhase currentPhase = LoginPhase.EARLY_LOGIN;
 
     FrontendLoginGate(FrontendInterceptor owner) {
         this.owner = owner;
@@ -43,9 +50,15 @@ final class FrontendLoginGate {
         this.clientProtocolVersion = clientProtocolVersion;
     }
 
-    boolean waitingLoginAcknowledgedPacket() {
-        return waitingLoginAcknowledgedPacket;
+    ProtocolVersion getClientProtocolVersion() {
+        return clientProtocolVersion;
     }
+
+    boolean waitingLoginAcknowledgedPacket() {
+        return currentPhase == LoginPhase.WAITING_ACK;
+    }
+
+    boolean clientAcknowledged() { return currentPhase == LoginPhase.ACKNOWLEDGED; }
 
     void buffer(Object msg, ChannelPromise promise) {
         pendingWrites.add(new PendingWrite(msg, promise));
@@ -59,28 +72,31 @@ final class FrontendLoginGate {
             return;
         }
 
-        ctx.executor().execute(() -> {
-            if (clientProtocolVersion != null && clientProtocolVersion.lessThan(ProtocolVersion.MINECRAFT_1_20_2)) {
-                removeOwner();
-            } else {
-                waitingLoginAcknowledgedPacket = true;
-            }
+        if (getClientProtocolVersion() != null && getClientProtocolVersion().lessThan(ProtocolVersion.MINECRAFT_1_20_2)) {
+            removeOwner();
+        } else {
+            currentPhase = LoginPhase.WAITING_ACK;
+        }
 
+        ctx.executor().execute(() -> {
             writePendingPackets();
             ctx.flush();
         });
     }
 
     void finishFrontendLogin(ChannelHandlerContext readCtx) {
-        waitingLoginAcknowledgedPacket = false;
+        currentPhase = LoginPhase.ACKNOWLEDGED;
 
+        // Flip decoder state SYNCHRONOUSLY so the next packet in this same read
+        // burst decodes under CONFIG instead of LOGIN.
+        MinecraftConnection mc = readCtx.pipeline().get(MinecraftConnection.class);
+        if (mc != null && mc.getState() == StateRegistry.LOGIN) {
+            mc.setState(StateRegistry.CONFIG);
+            logger.debug("[F][pipeline] state=CONFIG (sync, in finishFrontendLogin)");
+        }
+
+        // Defer only the pipeline surgery + buffer flush (the not channel-safe part).
         readCtx.executor().execute(() -> {
-            MinecraftConnection minecraftConnection = readCtx.pipeline().get(MinecraftConnection.class);
-            if (minecraftConnection != null) {
-                minecraftConnection.setState(StateRegistry.CONFIG);
-                logger.debug("[F][pipeline] restored MinecraftConnection state=CONFIG");
-            }
-
             removeOwner();
             writePendingPackets();
             readCtx.flush();
