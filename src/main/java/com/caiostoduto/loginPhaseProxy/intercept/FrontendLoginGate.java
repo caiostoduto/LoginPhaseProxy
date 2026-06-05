@@ -45,7 +45,7 @@ final class FrontendLoginGate {
     }
 
     ProtocolVersion getClientProtocolVersion() {
-        return clientProtocolVersion != null ? clientProtocolVersion : ProtocolVersion.MINECRAFT_1_20_2;
+        return clientProtocolVersion;
     }
 
     boolean waitingLoginAcknowledgedPacket() {
@@ -67,7 +67,7 @@ final class FrontendLoginGate {
         }
 
         ctx.executor().execute(() -> {
-            if (clientProtocolVersion != null && clientProtocolVersion.lessThan(ProtocolVersion.MINECRAFT_1_20_2)) {
+            if (getClientProtocolVersion() != null && getClientProtocolVersion().lessThan(ProtocolVersion.MINECRAFT_1_20_2)) {
                 removeOwner();
             } else {
                 waitingLoginAcknowledgedPacket = true;
