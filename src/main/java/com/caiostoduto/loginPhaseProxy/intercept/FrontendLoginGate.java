@@ -71,8 +71,19 @@ final class FrontendLoginGate {
         });
     }
 
+    private volatile boolean clientAcknowledged;
+
+    boolean clientAcknowledged() { return clientAcknowledged; }
+
+    ProtocolVersion clientProtocolVersionOrDefault() {
+        return clientProtocolVersion != null
+                ? clientProtocolVersion
+                : ProtocolVersion.MINECRAFT_1_20_2;
+    }
+
     void finishFrontendLogin(ChannelHandlerContext readCtx) {
         waitingLoginAcknowledgedPacket = false;
+        clientAcknowledged = true;   // only addition for the readability fix
 
         readCtx.executor().execute(() -> {
             MinecraftConnection minecraftConnection = readCtx.pipeline().get(MinecraftConnection.class);
@@ -80,7 +91,7 @@ final class FrontendLoginGate {
                 minecraftConnection.setState(StateRegistry.CONFIG);
                 logger.debug("[F][pipeline] restored MinecraftConnection state=CONFIG");
             }
-
+            
             removeOwner();
             writePendingPackets();
             readCtx.flush();
