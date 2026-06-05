@@ -7,6 +7,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
 import io.netty.util.ReferenceCountUtil;
 
+import java.nio.channels.ClosedChannelException;
 import java.util.UUID;
 
 import static com.caiostoduto.loginPhaseProxy.Constants.logger;
@@ -111,18 +112,31 @@ public class BackendInterceptor extends ChannelDuplexHandler {
         logger.debug("[F->B][relay] LoginPluginResponse id={} success={}",
                 packet.getId(), packet.isSuccess());
 
-        LoginPluginResponsePacket copiedPacket = new LoginPluginResponsePacket(
+        if (ctx == null) {
+            logger.warn("[B][F->S][fail] LoginPluginResponse id={} reason=no-backend-context",
+                    packet.getId());
+            return;
+        }
+
+        ctx.executor().execute(() -> {
+            if (!ctx.channel().isActive()) {
+                logger.warn("[B][F->S][fail] LoginPluginResponse id={} reason=channel-inactive",
+                        packet.getId());
+                return;
+            }
+
+            LoginPluginResponsePacket copiedPacket = new LoginPluginResponsePacket(
                 packet.getId(),
                 packet.isSuccess(),
                 packet.content().copy()
-        );
+            );
 
-        ctx.pipeline().writeAndFlush(copiedPacket).addListener(future -> {
-            if (!future.isSuccess()) {
-                ReferenceCountUtil.release(copiedPacket);
-                logger.warn("[B][F->S][fail] LoginPluginResponse id={} reason=write-failed",
-                        copiedPacket.getId(), future.cause());
-            }
+            ctx.pipeline().writeAndFlush(copiedPacket).addListener(future -> {
+                if (!future.isSuccess()) {
+                    logger.warn("[B][F->S][fail] LoginPluginResponse id={} reason=write-failed",
+                            copiedPacket.getId(), future.cause());
+                }
+            });
         });
     }
 

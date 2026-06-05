@@ -12,6 +12,7 @@ import io.netty.util.ReferenceCountUtil;
 import net.kyori.adventure.text.Component;
 import org.adde0109.ambassador.forge.ForgeConstants;
 
+import java.nio.channels.ClosedChannelException;
 import java.util.UUID;
 
 import static com.caiostoduto.loginPhaseProxy.Constants.logger;
@@ -205,18 +206,32 @@ public class FrontendInterceptor extends ChannelDuplexHandler {
      */
     public void writeLoginPluginMessage(LoginPluginMessagePacket packet) {
         logger.debug("[B->F][relay] LoginPluginMessage id={} channel={}", packet.getId(), packet.getChannel());
-        LoginPluginMessagePacket copiedPacket = new LoginPluginMessagePacket(
-                packet.getId(),
-                packet.getChannel(),
-                packet.content().copy()
-        );
 
-        ctx.pipeline().writeAndFlush(copiedPacket).addListener(future -> {
-            if (!future.isSuccess()) {
-                ReferenceCountUtil.release(copiedPacket);
-                logger.warn("[F][B->C][fail] LoginPluginMessage id={} channel={} reason=write-failed",
-                        copiedPacket.getId(), copiedPacket.getChannel(), future.cause());
+        if (ctx == null) {
+            logger.warn("[F][B->C][fail] LoginPluginMessage id={} channel={} reason=no-frontend-context",
+                    packet.getId(), packet.getChannel());
+            return;
+        }
+
+        ctx.executor().execute(() -> {
+            if (!ctx.channel().isActive()) {
+                logger.warn("[F][B->C][fail] LoginPluginMessage id={} channel={} reason=channel-inactive",
+                        packet.getId(), packet.getChannel(), new ClosedChannelException());
+                return;
             }
+
+            LoginPluginMessagePacket copiedPacket = new LoginPluginMessagePacket(
+                    packet.getId(),
+                    packet.getChannel(),
+                    packet.content().copy()
+            );
+
+            ctx.pipeline().writeAndFlush(copiedPacket).addListener(future -> {
+                if (!future.isSuccess()) {
+                    logger.warn("[F][B->C][fail] LoginPluginMessage id={} channel={} reason=write-failed",
+                            copiedPacket.getId(), copiedPacket.getChannel(), future.cause());
+                }
+            });
         });
     }
 

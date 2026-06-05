@@ -13,7 +13,9 @@ import com.velocitypowered.proxy.protocol.packet.LoginAcknowledgedPacket;
 import com.velocitypowered.proxy.protocol.packet.SetCompressionPacket;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPromise;
+import io.netty.util.ReferenceCountUtil;
 
+import java.nio.channels.ClosedChannelException;
 import java.util.ArrayDeque;
 import java.util.Queue;
 
@@ -27,6 +29,7 @@ final class FrontendLoginGate {
     private ProtocolVersion clientProtocolVersion;
     private ChannelHandlerContext ctx;
     private boolean pipelinePrepared;
+    private boolean skipCleanupFlush;
 
     private record PendingWrite(Object message, ChannelPromise promise) {}
 
@@ -65,11 +68,15 @@ final class FrontendLoginGate {
     }
 
     void flushAfterBackendLogin() {
+        if (ctx == null) {
+            discardPendingPackets(new IllegalStateException("Frontend channel context is not attached"));
+            return;
+        }
+
         logger.debug("[F][V->C][flush] pending={}", pendingWrites.size());
 
-        // Flush
-        if (ctx == null || !ctx.channel().isActive()) {
-            writePendingPackets();
+        if (!ctx.channel().isActive()) {
+            discardPendingPackets(new ClosedChannelException());
             return;
         }
 
@@ -153,6 +160,12 @@ final class FrontendLoginGate {
 
     private void writePendingPackets() {
         if (ctx == null) {
+            discardPendingPackets(new IllegalStateException("Frontend channel context is not attached"));
+            return;
+        }
+
+        if (!ctx.channel().isActive()) {
+            discardPendingPackets(new ClosedChannelException());
             return;
         }
 
@@ -163,6 +176,14 @@ final class FrontendLoginGate {
                 ctx.flush();
                 restorePipeline();
             }
+        }
+    }
+
+    private void discardPendingPackets(Throwable cause) {
+        PendingWrite pendingWrite;
+        while ((pendingWrite = pendingWrites.poll()) != null) {
+            ReferenceCountUtil.release(pendingWrite.message());
+            pendingWrite.promise().tryFailure(cause);
         }
     }
 }
