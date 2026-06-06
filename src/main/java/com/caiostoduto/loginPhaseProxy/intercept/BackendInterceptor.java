@@ -118,23 +118,25 @@ public class BackendInterceptor extends ChannelDuplexHandler {
             return;
         }
 
+        LoginPluginResponsePacket copiedPacket = new LoginPluginResponsePacket(
+                packet.getId(),
+                packet.isSuccess(),
+                packet.content().copy()
+        );
+
         ctx.executor().execute(() -> {
             if (!ctx.channel().isActive()) {
                 logger.warn("[B][F->S][fail] LoginPluginResponse id={} reason=channel-inactive",
                         packet.getId());
+                ReferenceCountUtil.release(copiedPacket);
                 return;
             }
-
-            LoginPluginResponsePacket copiedPacket = new LoginPluginResponsePacket(
-                packet.getId(),
-                packet.isSuccess(),
-                packet.content().copy()
-            );
 
             ctx.pipeline().writeAndFlush(copiedPacket).addListener(future -> {
                 if (!future.isSuccess()) {
                     logger.warn("[B][F->S][fail] LoginPluginResponse id={} reason=write-failed",
                             copiedPacket.getId(), future.cause());
+                    ReferenceCountUtil.release(copiedPacket);
                 }
             });
         });

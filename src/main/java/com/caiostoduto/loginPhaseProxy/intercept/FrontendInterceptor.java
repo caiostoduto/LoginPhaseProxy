@@ -213,23 +213,26 @@ public class FrontendInterceptor extends ChannelDuplexHandler {
             return;
         }
 
+        LoginPluginMessagePacket copiedPacket = new LoginPluginMessagePacket(
+                packet.getId(),
+                packet.getChannel(),
+                packet.content().copy()
+        );
+
         ctx.executor().execute(() -> {
             if (!ctx.channel().isActive()) {
                 logger.warn("[F][B->C][fail] LoginPluginMessage id={} channel={} reason=channel-inactive",
                         packet.getId(), packet.getChannel(), new ClosedChannelException());
+
+                ReferenceCountUtil.release(copiedPacket);
                 return;
             }
-
-            LoginPluginMessagePacket copiedPacket = new LoginPluginMessagePacket(
-                    packet.getId(),
-                    packet.getChannel(),
-                    packet.content().copy()
-            );
 
             ctx.pipeline().writeAndFlush(copiedPacket).addListener(future -> {
                 if (!future.isSuccess()) {
                     logger.warn("[F][B->C][fail] LoginPluginMessage id={} channel={} reason=write-failed",
                             copiedPacket.getId(), copiedPacket.getChannel(), future.cause());
+                    ReferenceCountUtil.release(copiedPacket);
                 }
             });
         });
